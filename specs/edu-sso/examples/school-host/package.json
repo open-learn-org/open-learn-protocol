@@ -9,5 +9,8 @@
   },
   "devDependencies": {
     "electron": "^32.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron"]
   }
 }
