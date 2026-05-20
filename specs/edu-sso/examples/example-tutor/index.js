@@ -8,7 +8,7 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-const PORT = Number(process.env.PORT ?? 5000);
+const PORT = Number(process.env.PORT ?? 5050);
 const ISSUER = process.env.ISSUER_URL ?? "http://localhost:4000";
 const AUDIENCE = process.env.AUDIENCE ?? "example-tutor";
 

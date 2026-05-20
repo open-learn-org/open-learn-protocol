@@ -11,13 +11,13 @@ npm install
 npm start
 ```
 
-By default listens on `http://localhost:5000` and verifies tokens against the issuer at `http://localhost:4000`.
+By default listens on `http://localhost:5050` and verifies tokens against the issuer at `http://localhost:4000`.
 
 Environment variables:
 
 | Var | Default | Meaning |
 |---|---|---|
-| `PORT` | `5000` | HTTP port |
+| `PORT` | `5050` | HTTP port (5000 is taken by AirPlay Receiver on macOS) |
 | `ISSUER_URL` | `http://localhost:4000` | Where to fetch the JWKS |
 | `AUDIENCE` | `example-tutor` | The `aud` claim to verify against |
 
@@ -38,7 +38,7 @@ TOKEN=$(curl -sX POST http://localhost:4000/token \
   -H "Content-Type: application/json" \
   -d '{"child_id":"student-1","audience":"example-tutor"}' | jq -r .token)
 
-open "http://localhost:5000/?edu_session=$TOKEN"
+open "http://localhost:5050/?edu_session=$TOKEN"
 ```
 
 You should land on the logged-in view with `alice@example.com`.

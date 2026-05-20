@@ -20,7 +20,7 @@ cd school-issuer
 npm install
 npm start
 
-# Terminal 2 — tutor (http://localhost:5000)
+# Terminal 2 — tutor (http://localhost:5050)
 cd example-tutor
 npm install
 npm start
@@ -43,7 +43,7 @@ Then in the school-host window: click **Example Tutor**. You should see "Hello, 
     -H "Content-Type: application/json" \
     -d '{"child_id":"student-1","audience":"example-tutor"}'
   ```
-- **Verifying without the host**: paste the token returned above into `http://localhost:5000/?edu_session=<token>` in a regular browser and you should be logged in.
+- **Verifying without the host**: paste the token returned above into `http://localhost:5050/?edu_session=<token>` in a regular browser and you should be logged in.
 
 ## What this example does NOT show
 

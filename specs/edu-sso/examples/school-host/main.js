@@ -23,7 +23,7 @@ const APPS = [
   {
     id: "example-tutor",
     name: "Example Tutor",
-    url: "http://localhost:5000/",
+    url: "http://localhost:5050/",
     audience: "example-tutor",
     icon: "📚",
   },
