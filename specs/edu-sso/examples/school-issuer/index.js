@@ -88,6 +88,10 @@ app.post("/token", async (req, res) => {
     return res.status(404).json({ error: "unknown audience" });
   }
 
+  const jti = randomUUID();
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + 300;
+
   const token = await new SignJWT({
     email: child.email,
     email_verified: true,
@@ -97,14 +101,22 @@ app.post("/token", async (req, res) => {
     .setIssuer(ISSUER)
     .setAudience(audience)
     .setSubject(`child:${child_id}`)
-    .setIssuedAt()
-    .setExpirationTime("5m")
-    .setJti(randomUUID())
+    .setIssuedAt(iat)
+    .setExpirationTime(exp)
+    .setJti(jti)
     .sign(privateKey);
 
-  console.log(
-    `[issuer] minted token for ${child_id} → ${audience} (jti shortened)`
-  );
+  console.log("[issuer] MINT", {
+    child_id,
+    email: child.email,
+    audience,
+    sub: `child:${child_id}`,
+    jti,
+    iat,
+    exp,
+    ttl_s: exp - iat,
+    kid,
+  });
   res.json({ token, expires_in: 300 });
 });
 

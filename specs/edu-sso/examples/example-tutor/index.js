@@ -23,16 +23,33 @@ async function eduSSO(req, res, next) {
   if (!token) return next();
 
   try {
-    const { payload } = await jwtVerify(String(token), jwks, {
+    const { payload, protectedHeader } = await jwtVerify(String(token), jwks, {
       issuer: ISSUER,
       audience: AUDIENCE,
       clockTolerance: 5,
     });
 
     if (payload.email_verified !== true) {
-      console.warn("[tutor] refusing token with email_verified !== true");
+      console.warn("[tutor] VERIFY rejected: email_verified !== true", {
+        iss: payload.iss,
+        aud: payload.aud,
+        jti: payload.jti,
+      });
       return next();
     }
+
+    console.log("[tutor] VERIFY ok", {
+      email: payload.email,
+      name: payload.name,
+      iss: payload.iss,
+      aud: payload.aud,
+      sub: payload.sub,
+      jti: payload.jti,
+      iat: payload.iat,
+      exp: payload.exp,
+      kid: protectedHeader.kid,
+      alg: protectedHeader.alg,
+    });
 
     // Drop our own session cookie.
     res.cookie(
@@ -46,7 +63,7 @@ async function eduSSO(req, res, next) {
     clean.searchParams.delete("edu_session");
     return res.redirect(302, clean.pathname + clean.search);
   } catch (err) {
-    console.warn("[tutor] token verification failed:", err.code ?? err.message);
+    console.warn("[tutor] VERIFY failed:", err.code ?? err.message);
     return next();
   }
 }
