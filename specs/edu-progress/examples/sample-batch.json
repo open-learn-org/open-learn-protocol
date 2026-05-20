@@ -1,0 +1,90 @@
+{
+  "events": [
+    {
+      "event_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+      "type": "session.started",
+      "occurred_at": "2026-05-20T14:00:00.000Z",
+      "child_ref": {
+        "iss": "https://issuer.example-launcher.com",
+        "sub": "child:abc123",
+        "email": "student@example.com"
+      },
+      "app_ref": { "app_id": "example-tutor", "version": "2.4.1" },
+      "session_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+      "data": {
+        "started_at": "2026-05-20T14:00:00.000Z",
+        "client": {
+          "platform": "desktop",
+          "launcher": "https://issuer.example-launcher.com"
+        }
+      }
+    },
+    {
+      "event_id": "01HX5XYV6FPK3R3D6T2H8E2VPR",
+      "type": "activity.started",
+      "occurred_at": "2026-05-20T14:00:08.412Z",
+      "child_ref": { "email": "student@example.com" },
+      "app_ref": { "app_id": "example-tutor" },
+      "session_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+      "data": {
+        "activity_id": "fractions-intro-3",
+        "topic": "math.fractions",
+        "difficulty": 2
+      }
+    },
+    {
+      "event_id": "01HX5XYWH3Y6CBPQ1J84R6V0KT",
+      "type": "struggle.signal",
+      "occurred_at": "2026-05-20T14:02:53.000Z",
+      "child_ref": { "email": "student@example.com" },
+      "app_ref": { "app_id": "example-tutor" },
+      "session_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+      "data": {
+        "kind": "stuck",
+        "context": { "activity_id": "fractions-intro-3", "duration_ms": 45000 }
+      }
+    },
+    {
+      "event_id": "01HX5XYXMG2YFGN9SBM3J8T3DV",
+      "type": "activity.completed",
+      "occurred_at": "2026-05-20T14:04:12.000Z",
+      "child_ref": { "email": "student@example.com" },
+      "app_ref": { "app_id": "example-tutor" },
+      "session_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+      "data": {
+        "activity_id": "fractions-intro-3",
+        "score": 0.85,
+        "time_ms": 244000,
+        "attempts": 3,
+        "passed": true
+      }
+    },
+    {
+      "event_id": "01HX5XYZ91N9SAY8GS5BE7S0DC",
+      "type": "skill.progress",
+      "occurred_at": "2026-05-20T14:04:13.000Z",
+      "child_ref": { "email": "student@example.com" },
+      "app_ref": { "app_id": "example-tutor" },
+      "session_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+      "data": {
+        "skill_id": "math.fractions.adding",
+        "level": 0.62,
+        "delta": 0.08,
+        "evidence": ["activity:fractions-intro-3"]
+      }
+    },
+    {
+      "event_id": "01HX5XZ0Z3FFXR9X4WBT5HMHQ4",
+      "type": "session.ended",
+      "occurred_at": "2026-05-20T14:32:00.000Z",
+      "child_ref": { "email": "student@example.com" },
+      "app_ref": { "app_id": "example-tutor" },
+      "session_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+      "data": {
+        "ended_at": "2026-05-20T14:32:00.000Z",
+        "active_ms": 1680000,
+        "reason": "closed"
+      }
+    }
+  ]
+}

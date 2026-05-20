@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-learn-protocol.org/specs/edu-progress/v1/struggle-signal.schema.json",
+  "title": "struggle.signal data",
+  "type": "object",
+  "required": ["kind"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["stuck", "rapid_click", "repeated_error", "abandoned"]
+    },
+    "context": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "activity_id": { "type": "string", "maxLength": 128 },
+        "skill_id": { "type": "string", "maxLength": 128 },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+name: Validate JSON Schemas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install ajv-cli
+        run: npm install -g ajv-cli@5 ajv-formats@3
+      - name: Validate schema files are valid Draft 2020-12
+        run: |
+          for f in specs/edu-progress/schema/*.schema.json; do
+            echo "Checking $f"
+            ajv compile -s "$f" --spec=draft2020 -c ajv-formats || exit 1
+          done
+      - name: Validate sample batch against the envelope schema
+        run: |
+          jq -c '.events[]' specs/edu-progress/examples/sample-batch.json \
+            | while read -r event; do
+                echo "$event" | ajv validate \
+                  -s specs/edu-progress/schema/event.schema.json \
+                  --spec=draft2020 -c ajv-formats \
+                  -d /dev/stdin || exit 1
+              done

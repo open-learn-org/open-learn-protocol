@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-learn-protocol.org/specs/edu-progress/v1/session-started.schema.json",
+  "title": "session.started data",
+  "type": "object",
+  "required": ["started_at"],
+  "additionalProperties": false,
+  "properties": {
+    "started_at": { "type": "string", "format": "date-time" },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "type": "string",
+          "enum": ["desktop", "web", "mobile", "tablet", "other"]
+        },
+        "launcher": {
+          "type": "string",
+          "format": "uri",
+          "description": "Issuer URL of the launcher hosting the app, when EduSSO is in play."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-learn-protocol.org/specs/edu-progress/v1/activity-started.schema.json",
+  "title": "activity.started data",
+  "type": "object",
+  "required": ["activity_id"],
+  "additionalProperties": false,
+  "properties": {
+    "activity_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "topic": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Opaque dotted string. Not standardized in v1."
+    },
+    "difficulty": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    }
+  }
+}
