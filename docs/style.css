@@ -168,12 +168,13 @@ p { margin: 12px 0; }
 .muted { color: var(--muted); }
 
 .demo {
-  margin: 24px 0 0;
+  margin: 24px auto 0;
+  max-width: 520px;
 }
 .demo video {
   display: block;
   width: 100%;
-  max-width: 100%;
+  height: auto;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: #0f1115;
@@ -183,6 +184,10 @@ p { margin: 12px 0; }
   margin-top: 12px;
   font-size: 13px;
   color: var(--muted);
+  text-align: center;
+}
+@media (max-width: 600px) {
+  .demo { max-width: 100%; }
 }
 
 .specs {
