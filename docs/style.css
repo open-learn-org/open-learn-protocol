@@ -250,9 +250,8 @@ ul.docs-list .file {
 }
 
 .sponsors {
-  background: #11281d;
-  color: #cbd9d1;
-  padding: 56px 32px;
+  border-top: 1px solid var(--border);
+  padding: 56px 32px 64px;
   margin-top: 80px;
 }
 .sponsors-inner {
@@ -264,42 +263,36 @@ ul.docs-list .file {
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #7faa92;
-  margin: 0 0 24px;
+  color: var(--muted);
+  margin: 0 0 28px;
 }
 .sponsors-logos {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 56px;
-  margin-bottom: 28px;
+  gap: 64px;
+  margin-bottom: 32px;
 }
 .sponsors-logos a {
   display: inline-flex;
   align-items: center;
   border: 0;
-  opacity: 0.92;
+  opacity: 0.75;
   transition: opacity 120ms ease;
 }
 .sponsors-logos a:hover { opacity: 1; }
 .sponsors-logos img {
-  height: 28px;
+  /* White SVGs flipped to black for a light page; works for any monochrome-white logo. */
+  filter: brightness(0);
+  height: 32px;
   width: auto;
   display: block;
 }
 .sponsors-note {
   font-size: 13px;
-  color: #91ad9f;
+  color: var(--muted);
   margin: 0;
-}
-.sponsors-note a {
-  color: #d6e6dd;
-  border-bottom: 1px solid #355a44;
-}
-.sponsors-note a:hover {
-  color: #ffffff;
-  border-bottom-color: #ffffff;
 }
 
 footer.site-footer {
