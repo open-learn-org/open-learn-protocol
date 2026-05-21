@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EduSSO — Open Learn Protocol</title>
+    <meta name="description" content="EduSSO: single sign-on between launchers and learning apps in about ten lines of code." />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a href="./" class="brand"><span class="dot"></span>Open Learn Protocol</a>
+      <nav>
+        <a href="./edu-sso.html">EduSSO</a>
+        <a href="./edu-progress.html">EduProgress</a>
+        <a href="https://github.com/open-learn-org/open-learn-protocol">GitHub</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="meta">A spec of Open Learn Protocol</p>
+      <h1>EduSSO<span class="status-badge">v1 draft</span></h1>
+      <p class="lead">
+        The launcher already knows the child. EduSSO hands that identity to the learning app in one signed JWT — no client registration, no OAuth dance, about ten lines of code on the app side.
+      </p>
+    </section>
+
+    <main>
+      <h2>The idea</h2>
+      <p>
+        When a launcher loads a learning app, it appends a query parameter to the URL: <code>?edu_session=&lt;JWT&gt;</code>. That JWT is signed by the launcher's issuer, names the child, and is valid for five minutes. The app verifies the token against the issuer's public JWKS, reads the email out of it, drops its own session cookie, and redirects to strip the parameter.
+      </p>
+      <p>
+        That's the entire protocol. No client_id, no callback URLs, no refresh tokens, no PKCE, no OIDC discovery dance.
+      </p>
+
+      <h2>The flow</h2>
+      <pre><code>┌──────────┐  1. mint(child, aud)   ┌───────────────┐
+│ Launcher │ ─────────────────────► │ Issuer        │
+│          │ ◄───────────────────── │ (signs JWT)   │
+└────┬─────┘     2. edu_session JWT └───────────────┘
+     │
+     │ 3. GET https://your-app.com/?edu_session=&lt;jwt&gt;
+     ▼
+┌────────────┐  4. verify(jwt, JWKS)   ┌──────────────┐
+│ Your app   │ ──────────────────────► │ Public JWKS  │
+│            │                         └──────────────┘
+│            │  5. setSessionCookie(email)
+│            │  6. 302 → same path without ?edu_session
+└────────────┘</code></pre>
+
+      <h2>The integration, in full</h2>
+      <p>Server-side, Node + <a href="https://github.com/panva/jose">jose</a>:</p>
+      <pre><code>import { createRemoteJWKSet, jwtVerify } from "jose";
+
+const jwks = createRemoteJWKSet(
+  new URL("https://issuer.example-launcher.com/.well-known/jwks.json")
+);
+
+export async function eduSSO(req, res, next) {
+  const token = req.query.edu_session;
+  if (!token) return next();
+
+  try {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: "https://issuer.example-launcher.com",
+      audience: "your-app-id",
+      clockTolerance: 5,
+    });
+    await upsertUser({ email: payload.email, name: payload.name });
+    await setSessionCookie(res, payload.email);
+
+    const clean = new URL(req.url, `https://${req.headers.host}`);
+    clean.searchParams.delete("edu_session");
+    return res.redirect(302, clean.pathname + clean.search);
+  } catch {
+    return next();
+  }
+}</code></pre>
+      <p>Mount it as middleware at the root of your app. That's the whole integration.</p>
+
+      <h2>The token</h2>
+      <pre><code>{
+  "iss": "https://issuer.example-launcher.com",
+  "aud": "your-app-id",
+  "sub": "child:abc123",
+  "email": "student@example.com",
+  "email_verified": true,
+  "name": "Sam",
+  "iat": 1779150000,
+  "exp": 1779150300,
+  "jti": "01HX5XYV6FPK3R3D6T2H8E2VPR"
+}</code></pre>
+
+      <div class="callout">
+        Five-minute expiry. Audience-bound, so a token minted for one app can't be replayed at another. Signed with RS256 or EdDSA; never symmetric, never <code>none</code>.
+      </div>
+
+      <h2>Read the spec</h2>
+      <ul class="docs-list">
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-sso/protocol.md">Overview &amp; FAQ</a>
+          <span class="file">specs/edu-sso/protocol.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-sso/issuer.md">Issuer implementation spec</a>
+          <span class="file">specs/edu-sso/issuer.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-sso/tutor.md">Relying-party implementation spec</a>
+          <span class="file">specs/edu-sso/tutor.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-sso/conformance.md">Conformance checklist</a>
+          <span class="file">specs/edu-sso/conformance.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples">Reference implementations</a>
+          <span class="file">specs/edu-sso/examples/ — school-issuer, example-tutor, school-host</span>
+        </li>
+      </ul>
+
+      <h2>What it deliberately does not include</h2>
+      <p>
+        No OAuth code exchange. No refresh tokens. No full OIDC discovery document. No federated logout. No scopes or granular claims. No multi-tenancy inside a single audience. If you need any of those, you're not looking for EduSSO; talk to your launcher operator before implementing workarounds.
+      </p>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Spec text is <a href="https://creativecommons.org/licenses/by/4.0/">CC&nbsp;BY&nbsp;4.0</a>. Example code is MIT.
+        Source on <a href="https://github.com/open-learn-org/open-learn-protocol">GitHub</a>.
+      </p>
+    </footer>
+  </body>
+</html>

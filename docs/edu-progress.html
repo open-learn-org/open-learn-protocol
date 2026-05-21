@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EduProgress — Open Learn Protocol</title>
+    <meta name="description" content="EduProgress: structured progress reporting from learning apps to collectors." />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a href="./" class="brand"><span class="dot"></span>Open Learn Protocol</a>
+      <nav>
+        <a href="./edu-sso.html">EduSSO</a>
+        <a href="./edu-progress.html">EduProgress</a>
+        <a href="https://github.com/open-learn-org/open-learn-protocol">GitHub</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="meta">A spec of Open Learn Protocol</p>
+      <h1>EduProgress<span class="status-badge">v1 draft</span></h1>
+      <p class="lead">
+        The learning app knows what the child did. EduProgress emits that knowledge as structured events to a collector — typically the launcher or a parent dashboard — so progress is portable across apps without a custom integration per pair.
+      </p>
+    </section>
+
+    <main>
+      <h2>The idea</h2>
+      <p>
+        The learning app emits envelope-shaped events as they happen — session started, activity completed, skill progress, the child got stuck — and batches them to an HTTPS endpoint defined by the collector. The collector validates each event against a JSON Schema, deduplicates by id, and stores or forwards as it sees fit.
+      </p>
+      <p>
+        There is no streaming, no shared skill taxonomy, no analytics, no queries back. v1 is just ingest. Anything richer is left to the consumer.
+      </p>
+
+      <h2>The flow</h2>
+      <pre><code>┌────────────┐  1. authenticated POST   ┌──────────────┐
+│ Learning   │ ──────────────────────►  │ Collector    │
+│ app        │   { events: [...] }      │ (launcher,   │
+│ (reporter) │                          │  dashboard)  │
+│            │ ◄──────────────────────  │              │
+└────────────┘   202 { accepted: N }    └──────────────┘</code></pre>
+
+      <h2>The event envelope</h2>
+      <p>Every event has the same outer shape. The <code>data</code> field is type-specific.</p>
+      <pre><code>{
+  "event_id": "01HX5XYV6FPK3R3D6T2H8E2VPR",
+  "type": "activity.completed",
+  "occurred_at": "2026-05-20T14:32:17.412Z",
+  "child_ref": {
+    "iss": "https://issuer.example-launcher.com",
+    "sub": "child:abc123",
+    "email": "student@example.com"
+  },
+  "app_ref": { "app_id": "your-app-id", "version": "2.4.1" },
+  "session_id": "01HX5XYTX5N3DTSXJC9MFAV0QH",
+  "data": {
+    "activity_id": "fractions-intro-3",
+    "score": 0.85,
+    "time_ms": 124000,
+    "attempts": 3,
+    "passed": true
+  }
+}</code></pre>
+
+      <h2>Core event types</h2>
+      <table>
+        <tr>
+          <th><code>session.started</code></th>
+          <td>Child begins using the app.</td>
+        </tr>
+        <tr>
+          <th><code>session.ended</code></th>
+          <td>Session ends for any reason. Carries <code>active_ms</code> and <code>reason</code>.</td>
+        </tr>
+        <tr>
+          <th><code>activity.started</code></th>
+          <td>Child begins a unit of work — a lesson, exercise, level.</td>
+        </tr>
+        <tr>
+          <th><code>activity.completed</code></th>
+          <td>The unit ends with a result. <code>score</code>, <code>attempts</code>, <code>passed</code>.</td>
+        </tr>
+        <tr>
+          <th><code>skill.progress</code></th>
+          <td>Mastery of a skill changes meaningfully. <code>level</code> and <code>delta</code>.</td>
+        </tr>
+        <tr>
+          <th><code>struggle.signal</code></th>
+          <td>Child is stuck, thrashing, or abandoning. The negative-signal channel.</td>
+        </tr>
+      </table>
+
+      <div class="callout">
+        v1 does not maintain a shared skill or topic taxonomy. <code>skill_id</code> and <code>topic</code> are opaque strings, defined by each app. The protocol standardizes the envelope, not the pedagogy.
+      </div>
+
+      <h2>Transport</h2>
+      <pre><code>POST &lt;collector_url&gt;/v1/events
+Authorization: Bearer &lt;reporter_token&gt;
+Content-Type: application/json
+
+{ "events": [ /* envelope objects */ ] }</code></pre>
+      <p>Batched HTTPS. ≤ 500 events or ≤ 1 MB per batch. Reporters retry transient failures; collectors deduplicate by <code>event_id</code>.</p>
+
+      <h2>Read the spec</h2>
+      <ul class="docs-list">
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-progress/protocol.md">Overview &amp; FAQ</a>
+          <span class="file">specs/edu-progress/protocol.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-progress/reporter.md">Reporter implementation spec</a>
+          <span class="file">specs/edu-progress/reporter.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-progress/collector.md">Collector implementation spec</a>
+          <span class="file">specs/edu-progress/collector.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-progress/conformance.md">Conformance checklist</a>
+          <span class="file">specs/edu-progress/conformance.md</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-progress/schema">JSON Schemas</a>
+          <span class="file">specs/edu-progress/schema/</span>
+        </li>
+        <li>
+          <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-progress/examples/sample-batch.json">Sample batch</a>
+          <span class="file">specs/edu-progress/examples/sample-batch.json</span>
+        </li>
+      </ul>
+
+      <h2>What it deliberately does not include</h2>
+      <p>
+        No shared skill taxonomy. No streaming. No collector-to-subscriber fan-out. No queries from reporter to collector. No analytics or computed fields on ingest. No deletion or rectification primitives. The collector's storage and retention policy is its own decision.
+      </p>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Spec text is <a href="https://creativecommons.org/licenses/by/4.0/">CC&nbsp;BY&nbsp;4.0</a>. Example code is MIT.
+        Source on <a href="https://github.com/open-learn-org/open-learn-protocol">GitHub</a>.
+      </p>
+    </footer>
+  </body>
+</html>

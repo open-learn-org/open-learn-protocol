@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Open Learn Protocol</title>
+    <meta name="description" content="Open standards for interoperability between learning launchers and learning apps." />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a href="./" class="brand"><span class="dot"></span>Open Learn Protocol</a>
+      <nav>
+        <a href="./edu-sso.html">EduSSO</a>
+        <a href="./edu-progress.html">EduProgress</a>
+        <a href="https://github.com/open-learn-org/open-learn-protocol">GitHub</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="meta">An open specification</p>
+      <h1>Standards for learning apps and the places they live.</h1>
+      <p class="lead">
+        Open Learn Protocol is a small set of specs that make it cheap and obvious for a learning app to be a good citizen inside any launcher, and for any launcher to host any learning app — without proprietary lock-in.
+      </p>
+    </section>
+
+    <main>
+      <h2>What this is</h2>
+      <p>
+        A child sits down to learn. They use a <strong>launcher</strong> — an app, a portal, a desktop shell — that knows who they are and what they should do today. From there, they open <strong>learning apps</strong>: tutors, games, reading coaches, anything educational.
+      </p>
+      <p>
+        Each launcher and each learning app has, historically, invented its own way to talk to the other side: a custom SSO flow, a custom progress webhook, a custom rostering format. Every integration is a custom integration. Every integration takes weeks. Every integration breaks.
+      </p>
+      <p>
+        OLP collects the small set of protocols you actually need to make this work, written as if you were going to implement them today — short, opinionated, with reference code. The goal is interop. The non-goal is to model pedagogy.
+      </p>
+
+      <h2>Specs</h2>
+      <div class="specs">
+        <a href="./edu-sso.html" class="spec-card">
+          <div class="name">EduSSO</div>
+          <span class="status">v1 draft</span>
+          <p class="description">
+            The launcher already knows the child. EduSSO hands that identity to the learning app in one signed JWT — about ten lines of code on the app side.
+          </p>
+          <div class="more">Read the spec →</div>
+        </a>
+        <a href="./edu-progress.html" class="spec-card">
+          <div class="name">EduProgress</div>
+          <span class="status">v1 draft</span>
+          <p class="description">
+            The learning app knows what the child did. EduProgress emits structured progress events to a collector, so progress is portable across apps and dashboards.
+          </p>
+          <div class="more">Read the spec →</div>
+        </a>
+      </div>
+
+      <h2>Principles</h2>
+      <table>
+        <tr>
+          <th>Small over expressive</th>
+          <td>Every spec fits in a single read. We'd rather force product decisions outside the protocol than encode them inside it.</td>
+        </tr>
+        <tr>
+          <th>Independently implementable</th>
+          <td>Each spec stands alone. You can adopt one without the others. They compose when you want them to.</td>
+        </tr>
+        <tr>
+          <th>Reference code, not just text</th>
+          <td>Every spec ships with a working example. If you can't make the example talk to your implementation in an afternoon, the spec is wrong.</td>
+        </tr>
+        <tr>
+          <th>Vendor-neutral</th>
+          <td>No registration, no central authority, no required services beyond what the protocol itself defines.</td>
+        </tr>
+      </table>
+
+      <h2>Status</h2>
+      <p>
+        Each spec is currently at <strong>draft v1</strong>. The text is written, reference code exists. The next step is real integrations, which is where the specs will either earn the right to call themselves v1 stable or change in obvious ways.
+      </p>
+      <p>
+        If you're implementing one of these, please tell us. <a href="https://github.com/open-learn-org/open-learn-protocol/issues">Open an issue</a> or send a PR.
+      </p>
+
+      <h2>Contribute</h2>
+      <p>
+        Editorial fixes go straight to pull request. Substantive changes go through an <a href="https://github.com/open-learn-org/open-learn-protocol/tree/main/rfcs">RFC</a>. Governance, license, and contribution rules live in the repository.
+      </p>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Spec text is <a href="https://creativecommons.org/licenses/by/4.0/">CC&nbsp;BY&nbsp;4.0</a>. Example code is MIT.
+        Source on <a href="https://github.com/open-learn-org/open-learn-protocol">GitHub</a>.
+      </p>
+    </footer>
+  </body>
+</html>
