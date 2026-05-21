@@ -26,15 +26,15 @@
     </section>
 
     <main>
-      <h2>What this is</h2>
+      <h2>The problem</h2>
       <p>
-        A child sits down to learn. They use a <strong>launcher</strong> — an app, a portal, a desktop shell — that knows who they are and what they should do today. From there, they open <strong>learning apps</strong>: tutors, games, reading coaches, anything educational.
+        A child sits down to learn. To get through a single afternoon they bounce between a tutor, a reading app, a math game, and a literacy coach — each with its own login, its own onboarding, its own dashboard. The kid forgets passwords. The parent re-enters them. The teacher has no consolidated view of what's actually being learned.
       </p>
       <p>
-        Each launcher and each learning app has, historically, invented its own way to talk to the other side: a custom SSO flow, a custom progress webhook, a custom rostering format. Every integration is a custom integration. Every integration takes weeks. Every integration breaks.
+        And nobody can answer the basic question: <em>what did my child do today?</em> Each app keeps progress in its own silo, in its own shape, behind its own export. There is no standard place a parent or teacher can look to see learning progress across the apps a child uses.
       </p>
       <p>
-        OLP collects the small set of protocols you actually need to make this work, written as if you were going to implement them today — short, opinionated, with reference code. The goal is interop. The non-goal is to model pedagogy.
+        OLP is a small set of specs that addresses both ends of that problem: a way for a host environment to hand identity to a learning app without yet another login, and a way for learning apps to report progress in a shape any dashboard can read. Short, opinionated, with reference code. The goal is interop. The non-goal is to model pedagogy.
       </p>
 
       <h2>Specs</h2>
@@ -90,6 +90,21 @@
         Editorial fixes go straight to pull request. Substantive changes go through an <a href="https://github.com/open-learn-org/open-learn-protocol/tree/main/rfcs">RFC</a>. Governance, license, and contribution rules live in the repository.
       </p>
     </main>
+
+    <section class="sponsors">
+      <div class="sponsors-inner">
+        <p class="sponsors-label">Supported by</p>
+        <div class="sponsors-logos">
+          <a href="https://portalbosque.com" rel="noopener" target="_blank" aria-label="Portal Bosque">
+            <img src="./sponsors/portal-bosque-white.svg" alt="Portal Bosque" />
+          </a>
+          <a href="https://www.synthesis.com" rel="noopener" target="_blank" aria-label="Synthesis">
+            <img src="./sponsors/synthesis-white.svg" alt="Synthesis" />
+          </a>
+        </div>
+        <p class="sponsors-note">Sponsoring this work means using these specs in production and giving feedback. Interested? <a href="https://github.com/open-learn-org/open-learn-protocol/issues/new">Open an issue</a>.</p>
+      </div>
+    </section>
 
     <footer class="site-footer">
       <p>

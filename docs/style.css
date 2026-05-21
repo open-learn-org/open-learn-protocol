@@ -244,6 +244,59 @@ ul.docs-list .file {
   margin-left: 8px;
 }
 
+.sponsors {
+  background: #11281d;
+  color: #cbd9d1;
+  padding: 56px 32px;
+  margin-top: 80px;
+}
+.sponsors-inner {
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
+}
+.sponsors-label {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #7faa92;
+  margin: 0 0 24px;
+}
+.sponsors-logos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 56px;
+  margin-bottom: 28px;
+}
+.sponsors-logos a {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  opacity: 0.92;
+  transition: opacity 120ms ease;
+}
+.sponsors-logos a:hover { opacity: 1; }
+.sponsors-logos img {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+.sponsors-note {
+  font-size: 13px;
+  color: #91ad9f;
+  margin: 0;
+}
+.sponsors-note a {
+  color: #d6e6dd;
+  border-bottom: 1px solid #355a44;
+}
+.sponsors-note a:hover {
+  color: #ffffff;
+  border-bottom-color: #ffffff;
+}
+
 footer.site-footer {
   border-top: 1px solid var(--border);
   padding: 32px;
