@@ -167,6 +167,24 @@ p { margin: 12px 0; }
 
 .muted { color: var(--muted); }
 
+.demo {
+  margin: 24px 0 0;
+}
+.demo video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #0f1115;
+  box-shadow: 0 10px 30px rgba(17, 24, 39, 0.08);
+}
+.demo figcaption {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .specs {
   display: grid;
   grid-template-columns: 1fr;

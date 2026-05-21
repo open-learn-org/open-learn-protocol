@@ -41,6 +41,22 @@
         OLP is a small set of specs that addresses both ends of that problem: a way for a host environment to hand identity to a learning app without yet another login, and a way for learning apps to report progress in a shape any dashboard can read. Short, opinionated, with reference code. The goal is interop. The non-goal is to model pedagogy.
       </p>
 
+      <h2>See it in motion</h2>
+      <p class="muted" style="margin-top: 0;">A reference launcher opens a tutor with one click. No login form, no password — the launcher mints a token, the tutor verifies it, the child is in.</p>
+      <figure class="demo">
+        <video
+          src="./school-host-demo.mp4"
+          controls
+          muted
+          playsinline
+          preload="metadata"
+          poster=""
+        ></video>
+        <figcaption>
+          The full sample lives in <a href="https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples">specs/edu-sso/examples</a>: a Node issuer, a Node tutor, and a tiny Electron launcher. About 250 lines of meaningful code total.
+        </figcaption>
+      </figure>
+
       <h2>Specs</h2>
       <div class="specs">
         <a href="./edu-sso.html" class="spec-card">
