@@ -285,9 +285,13 @@ ul.docs-list .file {
 .sponsors-logos img {
   /* White SVGs flipped to black for a light page; works for any monochrome-white logo. */
   filter: brightness(0);
-  height: 32px;
+  height: 36px;
   width: auto;
   display: block;
+}
+.sponsors-logos img.is-wordmark {
+  /* Wordmark logos sit visually larger than the icon-shaped ones; shrink. */
+  height: 22px;
 }
 .sponsors-note {
   font-size: 13px;
