@@ -19,6 +19,7 @@ Spec sources — fetch these before writing code:
 - https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/protocol.md
 - https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md
 - https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/conformance.md
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/discovery.md
 Reference implementation (Node + jose):
 - https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples/example-tutor
 
@@ -37,7 +38,8 @@ Task:
 4. Cache the JWKS in memory with a 1h TTL. Use the framework's standard library (jose `createRemoteJWKSet`, PyJWT's PyJWKClient, etc.).
 5. Never log the full request URL when `edu_session` is present. Redact the parameter before logging.
 6. Add config for multi-launcher support: if more than one (issuer, audience) pair is configured, dispatch by the token's `iss` claim. Reject unknown issuers.
-7. Run the conformance checklist (link above). Every box must be checkable.
+7. Publish a discovery manifest so launchers can auto-detect this tutor: serve `/.well-known/edu-sso.json` returning `{ "version": 1, "audience": "<same value as EDU_SSO_AUDIENCE>" }` with `Content-Type: application/json`. Use the framework's static-file convention (Next.js: `public/.well-known/edu-sso.json` or a route handler; Express: `app.get('/.well-known/edu-sso.json', ...)`; FastAPI: `@app.get('/.well-known/edu-sso.json')`). Don't hardcode the audience — read from env so the manifest stays in sync.
+8. Run the conformance checklist (link above). Every box must be checkable.
 
 Do NOT implement, even if the framework makes them easy:
 - OAuth code exchange, refresh tokens, PKCE, `state`/`nonce`.
