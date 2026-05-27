@@ -9,6 +9,7 @@
 - [`issuer.md`](./issuer.md) — implementer spec for launchers and their identity service.
 - [`tutor.md`](./tutor.md) — implementer spec for learning apps (relying parties).
 - [`conformance.md`](./conformance.md) — consolidated checklist across both sides.
+- [`discovery.md`](./discovery.md) — **optional** `/.well-known/edu-sso.json` manifest for self-describing tutors.
 - [`examples/`](./examples/) — reference implementations (Node + jose; more to come).
 
 ## One-paragraph summary

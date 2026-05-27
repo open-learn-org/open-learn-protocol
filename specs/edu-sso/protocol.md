@@ -177,6 +177,9 @@ Yes. Configure multiple `(issuer, audience, jwks)` entries; dispatch by `iss`. S
 **No backend at all?**
 Two options, both worse than having a backend: a thin serverless verifier (preferred) or the issuer's introspection endpoint (last resort, leaks the email to anyone with DevTools).
 
+**How does the launcher know my audience?**
+Static config by default — the operator types it in. Optionally, you can publish a tiny manifest at `/.well-known/edu-sso.json` so launchers can auto-detect it. See [`discovery.md`](./discovery.md). This is purely opt-in; v1 does not require it.
+
 ---
 
 ## What v1 deliberately does *not* include
