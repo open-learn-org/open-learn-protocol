@@ -117,6 +117,57 @@ export async function eduSSO(req, res, next) {
         Five-minute expiry. Audience-bound, so a token minted for one app can't be replayed at another. Signed with RS256 or EdDSA; never symmetric, never <code>none</code>.
       </div>
 
+      <h2>Quickstart for AI coding agents</h2>
+      <p>
+        If you use Claude Code, Cursor, Codex, Aider, or similar, paste the prompt below into your agent. It is self-contained and tells the agent exactly what to implement and what to skip. You only need <code>ISSUER</code> and <code>AUDIENCE</code> from your launcher operator.
+      </p>
+      <pre><code>Implement EduSSO v1 (relying-party / tutor side) in this codebase.
+
+Spec sources — fetch these before writing code:
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/protocol.md
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/conformance.md
+Reference implementation (Node + jose):
+- https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples/example-tutor
+
+Task:
+1. Detect this project's web framework (Next.js, Express, FastAPI, etc.) and identify its entry handler / middleware layer.
+2. Read EDU_SSO_ISSUER and EDU_SSO_AUDIENCE from env. Fail fast if missing.
+3. On every request, if `?edu_session=&lt;jwt&gt;` is present:
+   a. Verify the JWT using the issuer's JWKS at `${EDU_SSO_ISSUER}/.well-known/jwks.json`.
+      - Allow only RS256 and EdDSA. Reject alg=none and HS*.
+      - Check `iss` matches EDU_SSO_ISSUER exactly.
+      - Check `aud` matches EDU_SSO_AUDIENCE.
+      - Enforce `exp` and `iat` with ≤5s clock tolerance.
+      - Require `email_verified === true`.
+   b. On success: upsert the user by email, set the app's own session cookie, then redirect to the same path with `edu_session` removed from the query string.
+   c. On any verification failure: fall through silently to the normal flow (no error to the user, no logging of the raw token).
+4. Cache the JWKS in memory with a 1h TTL (jose `createRemoteJWKSet`, PyJWT `PyJWKClient`, etc.).
+5. Never log the full request URL when `edu_session` is present. Redact the parameter before logging.
+6. Multi-launcher: if more than one (issuer, audience) pair is configured, dispatch by the token's `iss` claim. Reject unknown issuers.
+7. Run the conformance checklist above. Every box must be checkable.
+
+Do NOT implement, even if the framework makes them easy:
+- OAuth code exchange, refresh tokens, PKCE, `state`/`nonce`.
+- Scopes, dynamic client registration, federated logout.
+- jti replay tracking (exp + your session cookie are enough).
+- Symmetric JWT verification.
+
+When you're done, show me: (a) the diff, (b) which conformance items you verified, (c) any items you couldn't verify and why.</code></pre>
+      <p>
+        Append one of these hints so the agent doesn't guess your stack:
+      </p>
+      <ul class="docs-list">
+        <li><strong>Next.js (App Router)</strong><span class="file">Implement as <code>middleware.ts</code> at the project root. Use <code>jose</code>. Set the cookie via <code>NextResponse.cookies.set</code> and 302 with the stripped URL.</span></li>
+        <li><strong>Next.js (Pages Router)</strong><span class="file">Implement in <code>pages/_middleware.ts</code> or in <code>getServerSideProps</code> on the entry page.</span></li>
+        <li><strong>Express</strong><span class="file">Mount before the session middleware. <code>jose</code> + <code>createRemoteJWKSet</code>.</span></li>
+        <li><strong>FastAPI / Starlette</strong><span class="file"><code>HTTPMiddleware</code> before auth dependencies. <code>PyJWT</code> with <code>PyJWKClient</code>.</span></li>
+        <li><strong>Go (net/http)</strong><span class="file">Wrap the mux. <code>github.com/golang-jwt/jwt/v5</code> + <code>github.com/MicahParks/keyfunc/v3</code>.</span></li>
+      </ul>
+      <p>
+        Expected diff size: ~50 lines. The reference Node implementation is that size. If your agent writes substantially more, ask why.
+      </p>
+
       <h2>Read the spec</h2>
       <ul class="docs-list">
         <li>
