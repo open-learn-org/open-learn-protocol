@@ -1,0 +1,30 @@
+# Open Learn Protocol
+
+> A family of small, focused protocols for the school/launcher/tutor triangle: identity (EduSSO) and progress (EduProgress). Each protocol is designed to be implementable in a morning.
+
+The canonical source for every spec is the GitHub repo at https://github.com/open-learn-org/open-learn-protocol. Spec text is CC BY 4.0; example code is MIT.
+
+## EduSSO v1 (identity)
+
+The launcher mints a short-lived JWT containing the child's email and signs it. The tutor verifies the JWT against the launcher's JWKS, drops its own session cookie, redirects to strip the token. No OAuth dance, no client registration, no refresh tokens.
+
+- [Overview & FAQ](https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/protocol.md): start here. Motivation, flow, threat model, FAQ.
+- [Tutor (relying party) spec](https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md): what a learning app implements. Includes an AI-agent quickstart prompt in §0.
+- [Issuer (launcher) spec](https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/issuer.md): what a launcher and its identity service implement.
+- [Conformance checklist](https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/conformance.md): consolidated pass/fail list across both sides.
+- [Discovery manifest (optional)](https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/discovery.md): tiny `/.well-known/edu-sso.json` so launchers can auto-detect a tutor's audience.
+- [Reference implementation (Node + jose)](https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples/example-tutor): ~50 lines of working code.
+
+## EduProgress v0 (progress reporting)
+
+Status: draft. See https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-progress.
+
+## Governance and process
+
+- [GOVERNANCE](https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/GOVERNANCE.md)
+- [CONTRIBUTING](https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/CONTRIBUTING.md)
+- [RFCs](https://github.com/open-learn-org/open-learn-protocol/tree/main/rfcs)
+
+## For AI coding agents
+
+If you've been asked to implement EduSSO in a codebase, jump directly to the Quickstart prompt at https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md (§0). It is self-contained and tells you exactly what to do and what to skip.

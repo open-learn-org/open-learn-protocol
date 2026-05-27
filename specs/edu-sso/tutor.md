@@ -8,6 +8,62 @@ If you implement only what's in this document, your tutor will accept tokens fro
 
 ---
 
+## 0. Quickstart for AI coding agents
+
+If you use an AI coding agent (Claude Code, Cursor, Codex, Aider, etc.), the fastest path is to paste the prompt below into it. The prompt is self-contained and points the agent at the canonical spec URLs. It assumes you've already obtained `ISSUER` and `AUDIENCE` from your launcher operator.
+
+````text
+Implement EduSSO v1 (relying-party / tutor side) in this codebase.
+
+Spec sources — fetch these before writing code:
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/protocol.md
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/conformance.md
+Reference implementation (Node + jose):
+- https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples/example-tutor
+
+Task:
+1. Detect this project's web framework (Next.js, Express, FastAPI, etc.) and identify its entry handler / middleware layer.
+2. Read EDU_SSO_ISSUER and EDU_SSO_AUDIENCE from env. Fail fast if missing.
+3. On every request, if `?edu_session=<jwt>` is present:
+   a. Verify the JWT using the issuer's JWKS at `${EDU_SSO_ISSUER}/.well-known/jwks.json`.
+      - Allow only RS256 and EdDSA. Reject alg=none and HS*.
+      - Check `iss` matches EDU_SSO_ISSUER exactly.
+      - Check `aud` matches EDU_SSO_AUDIENCE.
+      - Enforce `exp` and `iat` with ≤5s clock tolerance.
+      - Require `email_verified === true`.
+   b. On success: upsert the user by email, set the app's own session cookie, then redirect to the same path with `edu_session` removed from the query string.
+   c. On any verification failure: fall through silently to the normal flow (no error to the user, no logging of the raw token).
+4. Cache the JWKS in memory with a 1h TTL. Use the framework's standard library (jose `createRemoteJWKSet`, PyJWT's PyJWKClient, etc.).
+5. Never log the full request URL when `edu_session` is present. Redact the parameter before logging.
+6. Add config for multi-launcher support: if more than one (issuer, audience) pair is configured, dispatch by the token's `iss` claim. Reject unknown issuers.
+7. Run the conformance checklist (link above). Every box must be checkable.
+
+Do NOT implement, even if the framework makes them easy:
+- OAuth code exchange, refresh tokens, PKCE, `state`/`nonce`.
+- Scopes, dynamic client registration, federated logout.
+- jti replay tracking (exp + your session cookie are enough).
+- Symmetric JWT verification.
+
+When you're done, show me: (a) the diff, (b) which conformance items you verified, (c) any items you couldn't verify and why.
+````
+
+### Stack-specific hints to append
+
+Pick one and paste it after the prompt above so the agent doesn't guess:
+
+- **Next.js (App Router):** "Implement this as `middleware.ts` at the project root, matched on `/` (or wherever the entry is). Use `jose` for verification. Set the cookie via `NextResponse.cookies.set` and return a 302 with the stripped URL."
+- **Next.js (Pages Router):** "Implement in `pages/_middleware.ts` or in `getServerSideProps` on the entry page."
+- **Express:** "Add a middleware mounted before the session middleware. Use `jose` + `createRemoteJWKSet`."
+- **FastAPI / Starlette:** "Add an `HTTPMiddleware` that runs before the auth dependency. Use `PyJWT` with `PyJWKClient`. Set the session cookie via `response.set_cookie`."
+- **Go (net/http):** "Wrap the mux in a handler that runs first. Use `github.com/golang-jwt/jwt/v5` and `github.com/MicahParks/keyfunc/v3` for JWKS caching."
+
+### What to expect
+
+The reference Node implementation is ~50 lines. Your agent should produce a similar diff: a single new file (middleware / handler), a few lines wiring it into the framework, and the env-var plumbing. If it tries to write more, ask why.
+
+---
+
 ## 1. Goal
 
 Your app is opened inside a launcher that already knows the child. EduSSO hands you that identity in a verifiable form so you don't have to run your own onboarding for users that come from a launcher. You receive the child's email; you log them in.

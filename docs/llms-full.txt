@@ -1,0 +1,996 @@
+# Open Learn Protocol — Full Spec Text
+
+> Concatenated source-of-truth for AI agents. Sections preserved verbatim from the GitHub repo at https://github.com/open-learn-org/open-learn-protocol.
+
+
+---
+
+# === FILE: specs/edu-sso/protocol.md ===
+
+# EduSSO v1 — Single Sign-On for Learning Apps
+
+*Version 1 · open draft · feedback welcome*
+
+If you're reading this, someone on your team has agreed that your learning app — a tutor, a reading coach, an adaptive math platform, a game — should run inside a *launcher*: a parent- or school-managed environment that already knows which child is sitting in front of the screen.
+
+That means by the time a child opens your app, **the launcher already knows who they are**. The child has an email associated with their account, set up by a parent or admin at onboarding. It makes no sense for the child to log in again, every day, in every app. They're already authenticated where they came from.
+
+We want to hand you that identity. Without making you think about it.
+
+This document specifies how. The protocol is called **EduSSO v1**. It's designed so the integration on your side is, literally, about ten lines of code.
+
+---
+
+## The idea in one paragraph
+
+When a launcher loads your app, it appends a query parameter to your URL: `?edu_session=<JWT>`. That JWT is signed by the launcher's issuer, names the child, and is valid for five minutes. You verify it against the issuer's public JWKS, read the email out of it, set your own session cookie (or `req.session.userId = …`, or whatever shape your auth takes), redirect to the same URL with the parameter stripped, and you're done. The child is logged into your app. Forever — or until your session expires by your own rules.
+
+No client_id. No callback URLs. No refresh tokens. No PKCE. No OIDC discovery dance. Just a signed JWT in a query parameter.
+
+---
+
+## The flow
+
+```
+┌──────────┐  1. mint(child, aud)   ┌───────────────┐
+│ Launcher │ ─────────────────────► │ Issuer        │
+│          │ ◄───────────────────── │ (signs JWT)   │
+└────┬─────┘     2. edu_session JWT └───────────────┘
+     │
+     │ 3. GET https://your-app.com/?edu_session=<jwt>
+     ▼
+┌────────────┐  4. verify(jwt, JWKS)   ┌──────────────┐
+│ Your app   │ ──────────────────────► │ Public JWKS  │
+│            │                         └──────────────┘
+│            │  5. setSessionCookie(email)
+│            │  6. 302 → same path without ?edu_session
+└────────────┘
+```
+
+1. A parent or admin onboarded the child into the launcher. The launcher knows `(child_id, email, name)`.
+2. The child clicks your app from the launcher's home. Before loading your URL, the launcher asks its issuer for a token, audience-bound to you.
+3. The launcher loads your URL with `?edu_session=<jwt>` appended.
+4. Your backend sees the token on the incoming request. It verifies it.
+5. You do what you would normally do when logging a user in: drop a session cookie, upsert the user, whatever.
+6. You redirect, stripping the `edu_session` parameter. The child never sees it. It never lands in history, logs, or referrers.
+
+From here on, your app handles its session as it always has. If your cookie expires and the child returns, the launcher will inject a fresh token automatically. You don't have to do anything different.
+
+---
+
+## The token
+
+A standard JWT signed with RS256. Payload looks like this:
+
+```json
+{
+  "iss": "https://issuer.example-launcher.com",
+  "aud": "your-app-id",
+  "sub": "child:abc123",
+  "email": "student@example.com",
+  "email_verified": true,
+  "name": "Sam",
+  "iat": 1779150000,
+  "exp": 1779150300,
+  "jti": "01HX5XYV6FPK3R3D6T2H8E2VPR"
+}
+```
+
+Three things that matter:
+
+- **`email`** is the field you'll use. `email_verified` is always `true` because the launcher is responsible for verifying it at onboarding.
+- **`aud`** is the identifier assigned to you when you register with the launcher. If you verify against the wrong audience, the token will be rejected — this is what protects you from someone trying to replay a token minted for a different app.
+- **`exp`** is five minutes from issuance. Long enough to complete a login round-trip, short enough that a leaked token is uninteresting almost immediately.
+
+`sub` is there in case you want a stable opaque id; using it is optional.
+
+---
+
+## What you have to write
+
+One function. Using [`jose`](https://github.com/panva/jose) in Node — the example — but any modern JWT library will do:
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
+const jwks = createRemoteJWKSet(
+  new URL("https://issuer.example-launcher.com/.well-known/jwks.json")
+);
+
+export async function eduSSO(req, res, next) {
+  const token = req.query.edu_session;
+  if (!token) return next();
+
+  try {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: "https://issuer.example-launcher.com",
+      audience: "your-app-id",
+      clockTolerance: 5,
+    });
+
+    await upsertUser({ email: payload.email, name: payload.name });
+    await setSessionCookie(res, payload.email);
+
+    const clean = new URL(req.url, `https://${req.headers.host}`);
+    clean.searchParams.delete("edu_session");
+    return res.redirect(302, clean.pathname + clean.search);
+  } catch {
+    return next();
+  }
+}
+```
+
+Mount it as middleware at your root. **That's it.** There's no second part to this chapter.
+
+For other stacks, see [`tutor.md`](./tutor.md) §4.
+
+---
+
+## Why a query parameter and not something "more serious"
+
+Anything more serious would make you write more code.
+
+| Alternative | Why not |
+|---|---|
+| Inject `Authorization: Bearer` from the launcher | Lost on cross-subdomain redirects, stripped by some CDNs. Frail in invisible ways. |
+| `postMessage` from a preload script | Requires the tutor to be an SPA you control from first paint. The protocol has to work for SSR tutors too. |
+| OAuth code flow | Forces callbacks, `state`, back-channel exchanges. Far too much ceremony for "tell me who the child is." |
+| OIDC implicit | We're effectively doing this, without the discovery machinery. |
+
+A signed JWT in a query parameter works for SSR and SPA tutors alike, requires no coordination beyond "we'll give you an audience id," and pushes verification into your backend with code you already know how to write.
+
+---
+
+## What the launcher does for you (you don't have to think about this)
+
+- Requests a fresh token every time your app is opened. No caching.
+- Injects `Referrer-Policy: no-referrer` for your origin, so if you accidentally make a cross-origin call before the redirect, the token doesn't leak.
+- Isolates cookie storage per-tutor: cookies from one app are unreachable from another.
+- Wipes the partition when the child closes your app.
+
+---
+
+## Threat model
+
+| Risk | Mitigation |
+|---|---|
+| Token in a referrer on first cross-origin call | `Referrer-Policy: no-referrer` injected by the launcher |
+| Token in browser history / logs / analytics | Your redirect strips the parameter before first paint |
+| Replay against a different app | Audience-bound `aud` claim |
+| Stolen token, late use | Five-minute `exp` |
+| Issuer impersonation | Only the launcher's issuer holds the private key; the JWKS is read-only |
+| Compromised device | Out of scope — the operator's problem |
+
+---
+
+## FAQ
+
+**What if the JWKS is down?**
+Cache it in memory with a 1h TTL. The recommended libraries do this for you. If it's down at boot, choose fail-open (skip SSO, normal flow runs) or fail-closed (503). Default to fail-open.
+
+**Can I cache or reuse the token?**
+No. Single-use conceptually. Your own session cookie is the renewal mechanism.
+
+**What if a parent changes the child's email?**
+The next token carries the new email. Your `upsertUser` decides whether that's the same user.
+
+**Is there a logout?**
+Not federated. The launcher clears the partition when the child closes your app.
+
+**Five minutes — too short?**
+No. The launcher mints a fresh token on every open. Five minutes is enough to load, verify, and set your cookie.
+
+**Multi-launcher support?**
+Yes. Configure multiple `(issuer, audience, jwks)` entries; dispatch by `iss`. See [`tutor.md`](./tutor.md) §7.
+
+**No backend at all?**
+Two options, both worse than having a backend: a thin serverless verifier (preferred) or the issuer's introspection endpoint (last resort, leaks the email to anyone with DevTools).
+
+**How does the launcher know my audience?**
+Static config by default — the operator types it in. Optionally, you can publish a tiny manifest at `/.well-known/edu-sso.json` so launchers can auto-detect it. See [`discovery.md`](./discovery.md). This is purely opt-in; v1 does not require it.
+
+---
+
+## What v1 deliberately does *not* include
+
+- No OAuth code exchange.
+- No refresh tokens.
+- No full OIDC discovery — just JWKS and a token endpoint.
+- No federated logout.
+- No scopes or granular claims.
+- No multi-tenant inside a single audience.
+
+If you need any of these, talk to the launcher operator before implementing workarounds.
+
+---
+
+## Summary
+
+1. Accept the audience id the launcher assigns you.
+2. Load its JWKS at boot.
+3. In your entry route: if `?edu_session=` is present, verify it, log the user in, redirect with the parameter stripped.
+
+If it takes you more than a morning, please file an issue — something is wrong and we want to know.
+
+---
+
+# === FILE: specs/edu-sso/tutor.md ===
+
+# EduSSO v1 — Tutor / Relying Party Implementation Spec
+
+*Audience: implementers of a learning app (tutor, game, reading coach, anything) that wants to accept identities from one or more EduSSO launchers.*
+
+This document specifies what a conformant EduSSO tutor must do. The companion document `issuer.md` specifies what a launcher and its issuer must do. The two are designed to be implemented independently.
+
+If you implement only what's in this document, your tutor will accept tokens from any EduSSO-conformant launcher you onboard with.
+
+---
+
+## 0. Quickstart for AI coding agents
+
+If you use an AI coding agent (Claude Code, Cursor, Codex, Aider, etc.), the fastest path is to paste the prompt below into it. The prompt is self-contained and points the agent at the canonical spec URLs. It assumes you've already obtained `ISSUER` and `AUDIENCE` from your launcher operator.
+
+````text
+Implement EduSSO v1 (relying-party / tutor side) in this codebase.
+
+Spec sources — fetch these before writing code:
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/protocol.md
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/conformance.md
+Reference implementation (Node + jose):
+- https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples/example-tutor
+
+Task:
+1. Detect this project's web framework (Next.js, Express, FastAPI, etc.) and identify its entry handler / middleware layer.
+2. Read EDU_SSO_ISSUER and EDU_SSO_AUDIENCE from env. Fail fast if missing.
+3. On every request, if `?edu_session=<jwt>` is present:
+   a. Verify the JWT using the issuer's JWKS at `${EDU_SSO_ISSUER}/.well-known/jwks.json`.
+      - Allow only RS256 and EdDSA. Reject alg=none and HS*.
+      - Check `iss` matches EDU_SSO_ISSUER exactly.
+      - Check `aud` matches EDU_SSO_AUDIENCE.
+      - Enforce `exp` and `iat` with ≤5s clock tolerance.
+      - Require `email_verified === true`.
+   b. On success: upsert the user by email, set the app's own session cookie, then redirect to the same path with `edu_session` removed from the query string.
+   c. On any verification failure: fall through silently to the normal flow (no error to the user, no logging of the raw token).
+4. Cache the JWKS in memory with a 1h TTL. Use the framework's standard library (jose `createRemoteJWKSet`, PyJWT's PyJWKClient, etc.).
+5. Never log the full request URL when `edu_session` is present. Redact the parameter before logging.
+6. Add config for multi-launcher support: if more than one (issuer, audience) pair is configured, dispatch by the token's `iss` claim. Reject unknown issuers.
+7. Run the conformance checklist (link above). Every box must be checkable.
+
+Do NOT implement, even if the framework makes them easy:
+- OAuth code exchange, refresh tokens, PKCE, `state`/`nonce`.
+- Scopes, dynamic client registration, federated logout.
+- jti replay tracking (exp + your session cookie are enough).
+- Symmetric JWT verification.
+
+When you're done, show me: (a) the diff, (b) which conformance items you verified, (c) any items you couldn't verify and why.
+````
+
+### Stack-specific hints to append
+
+Pick one and paste it after the prompt above so the agent doesn't guess:
+
+- **Next.js (App Router):** "Implement this as `middleware.ts` at the project root, matched on `/` (or wherever the entry is). Use `jose` for verification. Set the cookie via `NextResponse.cookies.set` and return a 302 with the stripped URL."
+- **Next.js (Pages Router):** "Implement in `pages/_middleware.ts` or in `getServerSideProps` on the entry page."
+- **Express:** "Add a middleware mounted before the session middleware. Use `jose` + `createRemoteJWKSet`."
+- **FastAPI / Starlette:** "Add an `HTTPMiddleware` that runs before the auth dependency. Use `PyJWT` with `PyJWKClient`. Set the session cookie via `response.set_cookie`."
+- **Go (net/http):** "Wrap the mux in a handler that runs first. Use `github.com/golang-jwt/jwt/v5` and `github.com/MicahParks/keyfunc/v3` for JWKS caching."
+
+### What to expect
+
+The reference Node implementation is ~50 lines. Your agent should produce a similar diff: a single new file (middleware / handler), a few lines wiring it into the framework, and the env-var plumbing. If it tries to write more, ask why.
+
+---
+
+## 1. Goal
+
+Your app is opened inside a launcher that already knows the child. EduSSO hands you that identity in a verifiable form so you don't have to run your own onboarding for users that come from a launcher. You receive the child's email; you log them in.
+
+The protocol is intentionally narrow: it tells you who the child is. Nothing else. Anything beyond that — progress, billing, parent dashboards — is yours to design.
+
+---
+
+## 2. The flow as you'll see it
+
+1. A request lands on your app with `?edu_session=<JWT>` in the query string.
+2. You verify the JWT against the issuer's public keys.
+3. You read `email` (and optionally `name`) from the payload.
+4. You upsert the user, drop your own session cookie, and redirect to the same URL with the `edu_session` parameter stripped.
+5. The child's browser follows the redirect. From here on, your session cookie is in charge. EduSSO is no longer involved.
+
+That's the entire protocol from your side.
+
+---
+
+## 3. Verification rules
+
+You MUST perform all of these checks. Most JWT libraries do them for you when you pass the right options; the list exists so you know what you're relying on.
+
+### 3.1 Signature
+
+- MUST verify the JWT signature against a public key advertised by the issuer's JWKS.
+- MUST resolve the verifying key by `kid` from the JWT header.
+- MUST reject tokens with `alg: none`.
+- MUST reject tokens with symmetric algorithms (`HS256`, etc.) on this code path.
+
+### 3.2 Claims
+
+- `iss` MUST match the issuer URL you configured for the launcher. Exact string match.
+- `aud` MUST match the audience id the launcher assigned you. Exact string match.
+- `exp` MUST be in the future. You MAY allow up to 5 seconds of clock skew.
+- `iat` MUST be in the past (within the same 5-second tolerance).
+- `nbf` if present MUST be in the past.
+
+### 3.3 What you do NOT need to check
+
+- You don't need to track used `jti`s for replay protection. The 5-minute `exp` and your own session cookie make replays uninteresting.
+- You don't need to verify the chain to a root CA. The JWKS is the trust anchor.
+- You don't need to call back to the issuer. Verification is purely local once you have the JWKS.
+
+---
+
+## 4. The minimum implementation
+
+Node + [`jose`](https://github.com/panva/jose) + Express. Other stacks have direct equivalents.
+
+```ts
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
+const ISSUER = "https://issuer.example-launcher.com";
+const AUDIENCE = "your-app-id";
+
+const jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`));
+
+export async function eduSSO(req, res, next) {
+  const token = req.query.edu_session;
+  if (!token) return next();
+
+  try {
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      clockTolerance: 5,
+    });
+
+    await upsertUser({ email: payload.email, name: payload.name });
+    await setSessionCookie(res, payload.email);
+
+    const url = new URL(req.url, `https://${req.headers.host}`);
+    url.searchParams.delete("edu_session");
+    return res.redirect(302, url.pathname + url.search);
+  } catch {
+    // Invalid or expired token: fall through to your normal flow.
+    return next();
+  }
+}
+```
+
+Mount it once at the root of your app. You're done.
+
+Equivalents in other stacks:
+
+- **Python:** `pyjwt` with `PyJWKClient`.
+- **Go:** `github.com/lestrrat-go/jwx/v2` (`jwk.Cache` + `jwt.Parse`).
+- **Ruby:** `ruby-jwt` with a JWKS client.
+- **Java / Kotlin:** `nimbus-jose-jwt` (`JWKSource` + `DefaultJWTProcessor`).
+- **.NET:** `Microsoft.IdentityModel.Tokens` with `IConfigurationManager<OpenIdConnectConfiguration>`.
+
+All follow the same shape: load the JWKS once at boot, verify with issuer + audience, read `email`.
+
+---
+
+## 5. URL hygiene
+
+The token MUST not survive in places where it can be observed later.
+
+- You MUST redirect to a URL that has the `edu_session` parameter removed.
+- The redirect SHOULD happen *before* you emit any HTML containing references to the child (so the token doesn't end up in a referrer on the first cross-origin asset load).
+- You SHOULD NOT log the full request URL on routes that handle `edu_session`. Strip the parameter from log records or omit those request logs entirely.
+- You SHOULD NOT include the request URL in error reports, analytics, or APM traces while `edu_session` is present.
+
+---
+
+## 6. JWKS caching
+
+The recommended libraries cache the JWKS for you. If you're rolling your own:
+
+- Fetch the JWKS at boot. Verify it's a syntactically valid JWK Set.
+- Cache it in memory for at least 1 hour. Refresh in the background, not on the request path.
+- If a token has a `kid` you don't recognize, refresh the JWKS once. This handles the case where the issuer just rotated.
+- If the JWKS endpoint is unreachable at boot, you MUST choose a policy and document it:
+  - **Fail-open**: skip SSO verification and let your normal login flow run. Children see your login page; they can still log in by other means if you support them. This is the recommended default.
+  - **Fail-closed**: return 503 to any request carrying `edu_session`. Use only if your app has no fallback authentication.
+
+You MUST NOT verify tokens against an uncached JWKS fetched mid-request without a circuit breaker. Otherwise an attacker can DoS your verifier by replaying expired tokens.
+
+---
+
+## 7. Multi-launcher support
+
+If your app is onboarded with more than one launcher, your config has multiple entries:
+
+```ts
+const LAUNCHERS = [
+  {
+    issuer: "https://issuer.launcher-a.com",
+    audience: "your-app-on-a",
+    jwks: createRemoteJWKSet(new URL("https://issuer.launcher-a.com/.well-known/jwks.json")),
+  },
+  {
+    issuer: "https://issuer.launcher-b.com",
+    audience: "tutor-xyz",
+    jwks: createRemoteJWKSet(new URL("https://issuer.launcher-b.com/.well-known/jwks.json")),
+  },
+];
+
+const byIssuer = new Map(LAUNCHERS.map((l) => [l.issuer, l]));
+```
+
+Dispatch by `iss`. Read the issuer from the unverified payload (`decodeJwt` in `jose`, equivalent in other libraries), look up the launcher, then verify with that launcher's JWKS and audience.
+
+```ts
+import { decodeJwt, jwtVerify } from "jose";
+
+const { iss } = decodeJwt(token);            // unverified peek — only used for routing
+const launcher = byIssuer.get(iss);
+if (!launcher) return next();                // unknown issuer → silently drop
+
+const { payload } = await jwtVerify(token, launcher.jwks, {
+  issuer: launcher.issuer,
+  audience: launcher.audience,
+  clockTolerance: 5,
+});
+```
+
+The unverified peek is safe because the trust check still happens inside `jwtVerify`. A forged `iss` cannot match any known launcher's signing key.
+
+The launcher registry MUST be code, not a runtime configuration loaded from a remote URL. Adding a launcher is a deploy.
+
+You SHOULD drop tokens with unknown issuers silently rather than returning an error. Don't leak which launchers you trust.
+
+---
+
+## 8. Identity decisions
+
+These are not protocol decisions — they're product decisions you have to make. The spec calls them out so they don't surprise you in production.
+
+### 8.1 Matching the same child across launchers
+
+If the same child is enrolled in two launchers, you'll receive tokens with potentially the same `email` but different `sub` values (because each launcher mints its own opaque ids).
+
+Three reasonable strategies:
+
+- **Match by email.** Same email = same user, regardless of launcher. Almost always right for learning apps; progress and history merge naturally. Default unless you have a reason otherwise.
+- **Match by (`iss`, `sub`).** Same child looks like two accounts to you. Use only if you're worried about unrelated children sharing an email (rare in practice but possible).
+- **Hybrid.** Match by email, record `(iss, sub)` as evidence, flag conflicts. Most enterprise. Overkill for most.
+
+Pick one explicitly. The wrong failure mode is "the same child has different progress at home and at school because the implementer didn't decide."
+
+### 8.2 Email changes
+
+If a parent changes the child's email in the launcher, the next token will carry the new email. Your `upsertUser` decides whether that's the same user or a new one. If you matched by email in §8.1, you'll get a duplicate user; if you matched by `sub`, you'll keep the same user and just update the email.
+
+### 8.3 Trust in `email_verified`
+
+The token claims `email_verified: true`. You MAY treat this as sufficient to skip your own email verification flow for users that come in via EduSSO. You SHOULD NOT treat `email_verified: false` as a valid SSO state; if you see it, drop the token.
+
+---
+
+## 9. Error handling
+
+The recommended posture is: **on any token error, silently fall through to your normal flow**.
+
+- Invalid signature → drop the token, run normal flow.
+- Expired token → drop, run normal flow.
+- Wrong audience → drop, run normal flow.
+- Unknown issuer → drop, run normal flow.
+- Malformed JWT → drop, run normal flow.
+
+Reasons:
+
+- You don't want to leak which issuers you trust.
+- You don't want a confusing error in the child's face if the launcher misconfigures something. They didn't ask for SSO; it should either work invisibly or be invisible.
+- Your normal flow is the safe default. If your app requires login, it'll ask; if it allows guests, it'll allow guests.
+
+You SHOULD emit a structured log line for token failures, classified by error type and (where parseable) `iss`. Don't include the token in logs. Don't surface error details to the client.
+
+---
+
+## 10. Operational considerations
+
+- **Per-launcher metrics.** Tag verification metrics by `iss`. One launcher's outage should not look like a global problem in your dashboards.
+- **Per-launcher feature gates.** If commercial deals or feature availability differ by launcher, stash `iss` on the session and gate from there.
+- **Per-launcher rate limits.** Same idea; the `iss` claim is your tenant key.
+- **Clock skew.** Stay within 5 seconds of NTP. The spec requires 5s tolerance on your side; that's already accounting for normal drift.
+- **Cookie scope.** Your session cookie SHOULD be `Secure; HttpOnly; SameSite=Lax`. The launcher isolates cookies per-tutor at its end, but defense in depth.
+
+---
+
+## 11. Alternative: no backend
+
+If your tutor is purely client-side, you have two options, in order of preference:
+
+### 11.1 Thin serverless verifier (preferred)
+
+Stand up a single serverless endpoint you control (Cloudflare Worker, Vercel Edge Function, Lambda). Your frontend POSTs the `edu_session` token to it; the function verifies and returns a signed cookie. Same security properties as a normal backend; the function is ~50 lines.
+
+### 11.2 Issuer-side introspection (last resort)
+
+If the launcher's issuer exposes an introspection endpoint (Section 3.3 of `issuer.md`), your frontend MAY call it directly:
+
+```js
+const token = new URLSearchParams(location.search).get("edu_session");
+const r = await fetch(`https://issuer.example-launcher.com/v1/introspect?token=${token}`);
+const { active, email } = await r.json();
+```
+
+This works, but anyone with DevTools can read the email after verification. Use only when the email is not sensitive in your context. Most learning apps should not rely on this.
+
+---
+
+## 12. What you do NOT need to implement
+
+So you don't waste effort:
+
+- No OAuth code exchange.
+- No refresh tokens — your own session cookie is the renewal mechanism.
+- No federated logout — the launcher clears your cookies when the child closes your app.
+- No discovery document parsing — the JWKS URL and audience are configured statically.
+- No scopes — the token tells you who the child is, nothing else.
+- No `state` or `nonce` parameters — replay is mitigated by `exp` and your session cookie.
+- No client registration with the issuer — you're not authenticated to it; you only verify its tokens.
+- No `jti` tracking for replay — see §3.3.
+
+If you find yourself implementing any of these, you've drifted from EduSSO into OIDC. Stop.
+
+---
+
+## 13. Conformance checklist
+
+A tutor conforms to EduSSO v1 if all of the following are true:
+
+- [ ] Verifies JWTs using RS256 or EdDSA via the issuer's JWKS.
+- [ ] Rejects tokens with `alg: none` or symmetric algorithms.
+- [ ] Checks `iss` against configured launcher issuer URLs.
+- [ ] Checks `aud` against the audience id assigned by that launcher.
+- [ ] Checks `exp` and `iat` with at most 5s clock tolerance.
+- [ ] Reads `email` from the verified payload.
+- [ ] Refuses tokens with `email_verified: false`.
+- [ ] Redirects after login to strip `edu_session` from the URL.
+- [ ] Caches JWKS in memory with a documented refresh policy.
+- [ ] Falls through silently on any verification error.
+- [ ] Does not log the full request URL when `edu_session` is present.
+- [ ] If multi-launcher: dispatches by `iss` to the correct verifier; rejects unknown issuers.
+
+Hitting every box puts you in conformance. There is no test suite in v1; conformance is by inspection.
+
+---
+
+## 14. Versioning
+
+This document specifies v1. Future versions MAY add optional claims and signing algorithms without changing the conformance checklist; breaking changes will increment the major version. There is no in-protocol version negotiation; your launcher operator tells you which version they speak when you onboard.
+
+---
+
+# === FILE: specs/edu-sso/issuer.md ===
+
+# EduSSO v1 — Issuer / Launcher Implementation Spec
+
+*Audience: implementers of a launcher (the host environment that knows the child) and its identity service (the issuer).*
+
+This document specifies what a conformant EduSSO launcher must do. The companion document `tutor.md` specifies what a learning app (relying party) must do. The two are designed to be implemented independently.
+
+---
+
+## 1. Roles
+
+An EduSSO deployment has three logical roles:
+
+- **Launcher** — the application the child opens. Knows the child's identity. Loads tutors inside it (web view, iframe, or browser tab). MAY be the same process as the issuer.
+- **Issuer** — the service that signs identity tokens and publishes the JWKS. MUST hold the signing private key. MAY be operated by the same organization as the launcher or be a separate service.
+- **Tutor** — the learning app. The relying party. Specified in `tutor.md`.
+
+The launcher MUST authenticate itself to the issuer (Section 6). Tutors are unauthenticated consumers of public keys.
+
+---
+
+## 2. Trust model
+
+The issuer's public key is the root of trust. A tutor that has the issuer's JWKS URL and the correct audience id can verify any token the launcher hands it. There are no client secrets shared with tutors.
+
+The launcher does *not* hold the signing key. It calls the issuer over an authenticated channel to mint tokens on demand. This separation matters: a compromised launcher (e.g. a child's device is rooted) cannot mint tokens for other children — at worst it can request tokens for the child already configured on it.
+
+---
+
+## 3. Endpoints the issuer MUST expose
+
+### 3.1 JWKS endpoint
+
+```
+GET https://issuer.example.com/.well-known/jwks.json
+```
+
+- MUST be served over HTTPS.
+- MUST return a JSON Web Key Set as defined in RFC 7517.
+- MUST be publicly accessible without authentication.
+- MUST set `Cache-Control: public, max-age=3600` or similar (1h recommended).
+- MUST include all keys currently valid for verification: the active signing key and any keys in their post-rotation grace period (Section 8).
+- SHOULD use stable key ids (`kid`) so verifiers can index by `kid`.
+
+Minimal example:
+
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "kid": "2026-05-01",
+      "n": "…",
+      "e": "AQAB"
+    }
+  ]
+}
+```
+
+### 3.2 Token endpoint
+
+```
+POST https://issuer.example.com/token
+Authorization: Bearer <launcher_install_credential>
+Content-Type: application/json
+
+{
+  "child_id": "abc123",
+  "audience": "your-app-id"
+}
+```
+
+- MUST be served over HTTPS.
+- MUST require authentication of the calling launcher (Section 6).
+- MUST validate that the requested `audience` is a tutor the launcher is permitted to launch.
+- MUST validate that the requested `child_id` is bound to the authenticated launcher.
+- MUST return a freshly signed JWT (Section 4) with `exp` no further than 300 seconds in the future.
+- MUST NOT return the same JWT twice (the `jti` claim must be unique per call).
+- Response shape:
+
+```json
+{
+  "token": "eyJ…",
+  "expires_in": 300
+}
+```
+
+- Error responses MUST use standard HTTP status codes:
+  - `401` unauthenticated launcher
+  - `403` launcher not permitted to mint for this child or audience
+  - `404` unknown audience
+  - `429` rate limited
+  - `5xx` issuer fault
+
+### 3.3 Introspection endpoint (OPTIONAL)
+
+For tutors that cannot run server-side verification (Section 9 of `tutor.md`).
+
+```
+GET https://issuer.example.com/v1/introspect?token=<jwt>
+```
+
+- MUST verify the token as a verifier would.
+- MUST return `{ "active": false }` for any invalid token, with no further detail.
+- MUST return `{ "active": true, "email": "...", "name": "...", "exp": ..., "aud": "..." }` for a valid one.
+- MUST be rate-limited per source IP.
+- MAY be omitted entirely; tutors that need it but cannot find it are conformant in failing.
+
+---
+
+## 4. The token
+
+The issuer MUST emit JWTs conforming to RFC 7519, signed with an asymmetric algorithm.
+
+### 4.1 Algorithms
+
+- MUST support RS256.
+- SHOULD support EdDSA (Ed25519) for new deployments.
+- MUST NOT issue tokens with `alg: none`.
+- MUST NOT issue tokens with HS256 or any symmetric algorithm via this endpoint. (Symmetric pre-shared schemes are out of scope for v1 and discussed only in `tutor.md` §10 as an alternative deployment.)
+
+### 4.2 Header
+
+```json
+{ "alg": "RS256", "typ": "JWT", "kid": "2026-05-01" }
+```
+
+- MUST include `kid` matching the JWKS entry that signed the token.
+
+### 4.3 Claims
+
+Required:
+
+| Claim | Type | Meaning |
+|---|---|---|
+| `iss` | string | Stable HTTPS URL identifying this issuer. MUST equal the URL prefix tutors use to fetch the JWKS, minus `/.well-known/jwks.json`. |
+| `aud` | string | The audience id the launcher requested. MUST match exactly what was registered for the target tutor. |
+| `sub` | string | Opaque, stable per-child identifier within this issuer. RECOMMENDED format: `child:<id>`. MUST NOT contain PII. |
+| `email` | string | The child's email address. |
+| `email_verified` | boolean | MUST be `true` if and only if the launcher has verified the email out of band. |
+| `iat` | number | Issued-at, seconds since epoch. |
+| `exp` | number | Expiry, seconds since epoch. MUST be `iat + 300` or less. |
+| `jti` | string | Unique token id (UUID, ULID, or similar). |
+
+Optional:
+
+| Claim | Type | Meaning |
+|---|---|---|
+| `name` | string | Display name. |
+| `locale` | string | BCP-47 tag (e.g. `en-US`, `es-AR`). |
+| `nbf` | number | Not-before. If omitted, assume `iat`. |
+
+The issuer MUST NOT include claims beyond what is necessary to identify the child to the tutor. In particular: no parent email, no payment information, no device identifiers.
+
+### 4.4 Audience model
+
+- An *audience id* is a short opaque string identifying a single tutor product as configured at this issuer.
+- Audience ids are scoped to the issuer; two issuers MAY assign different audience ids to the same tutor.
+- The issuer MAY allow one tutor to be registered under multiple audience ids (for staging vs. production environments, for example), but each mint call MUST resolve to exactly one.
+
+---
+
+## 5. Key management
+
+### 5.1 Generation
+
+- Use a cryptographically secure generator (HSM, KMS, or `openssl genrsa`/`openssl genpkey` with RSA ≥ 2048 bits or Ed25519).
+- The private key MUST NOT be checked into source control or exposed in logs.
+
+### 5.2 Storage
+
+- Private key SHOULD live in an HSM, KMS, or equivalent (AWS KMS, GCP KMS, Azure Key Vault).
+- If stored as a file, MUST be readable only by the issuer process user and MUST NOT be backed up to systems with broader access (e.g. unencrypted CI artifacts).
+
+### 5.3 Rotation
+
+- The issuer MUST be able to rotate signing keys without taking the JWKS endpoint offline.
+- Rotation procedure:
+  1. Generate new key. Add it to the JWKS as `use: sig` with a new `kid`.
+  2. Continue signing with the *old* key for a grace period (≥ 1 hour) so JWKS caches in tutors update.
+  3. Switch signing to the new key. Both keys remain in the JWKS during a second grace period (≥ 24 hours) so tokens minted just before the switch remain verifiable.
+  4. Remove the old key from the JWKS.
+- The issuer SHOULD rotate keys at least annually and immediately on suspected compromise.
+
+---
+
+## 6. Launcher authentication
+
+The launcher authenticates to the issuer's `/token` endpoint. The issuer MUST verify that the calling launcher is permitted to mint for the requested `child_id`.
+
+v1 leaves the mechanism unspecified but RECOMMENDS one of:
+
+- **Install credential**: a long-lived Bearer token issued at the time of launcher installation, bound to a single child. The launcher stores it locally (OS keychain). Compromise of the device's keychain leaks the credential for that child only.
+- **mTLS**: each launcher install has its own client certificate, bound to a single child.
+- **OAuth client credentials**: the launcher is registered as a client of the issuer's authorization server.
+
+What the issuer MUST NOT do:
+
+- MUST NOT accept unauthenticated mint requests.
+- MUST NOT allow a launcher install bound to child A to mint tokens for child B.
+- MUST NOT log full credentials.
+
+---
+
+## 7. Launching a tutor
+
+This section specifies what the *launcher* (not the issuer) does when the child opens a tutor.
+
+1. The launcher resolves the tutor's base URL and its audience id from its local catalog.
+2. The launcher calls `POST /token` with `{ child_id, audience }` and receives a token.
+3. The launcher loads the tutor URL with `?edu_session=<token>` appended.
+4. The launcher MUST inject `Referrer-Policy: no-referrer` on requests to the tutor's origin until the first redirect that removes `edu_session` from the URL.
+5. The launcher MUST isolate cookie storage per-tutor: cookies set by tutor A are unreachable to tutor B. (In Electron, this maps to `session.fromPartition("persist:tutor-<appId>")`.)
+6. The launcher SHOULD strip `edu_session` from any URL it displays to the user, even before the tutor's redirect lands.
+
+The launcher MUST NOT:
+
+- Reuse a token across openings of the same tutor.
+- Pass the token by any channel other than the query parameter `edu_session`. (Headers, postMessage, and body parameters are out of scope for v1.)
+- Cache the token in any persistent storage. The token lives only for the duration of the open call.
+
+When the child closes the tutor from the launcher UI, the launcher MUST clear the tutor's cookie partition (`session.clearStorageData()` equivalent). This is the spec's only logout mechanism.
+
+---
+
+## 8. Operational requirements
+
+- The JWKS endpoint MUST have ≥ 99.9% availability target. JWKS outages break new logins across the whole tutor ecosystem.
+- The token endpoint MAY have lower availability; tutors with valid sessions are unaffected.
+- The issuer MUST emit structured logs of mint calls including `iss`, `aud`, `sub`, `jti`, and timestamp. These logs are the audit trail for "who saw which child."
+- The issuer SHOULD rate-limit per-launcher and per-child mint calls (e.g. 60/min).
+- Clock skew: the issuer MUST use NTP. Tutors are spec'd to tolerate 5s of clock skew (`tutor.md` §3.2); the issuer should stay well within that.
+
+---
+
+## 9. Privacy
+
+- The token contains PII (email, name). Treat it as sensitive.
+- The mint log contains a record of "child X used tutor Y at time T." This is observational data subject to whatever the operator's privacy policy permits. The spec is silent on retention; operators MUST publish their policy.
+- The introspection endpoint, if exposed, MUST NOT return mint logs or aggregate data; only single-token verification.
+
+---
+
+## 10. Multi-tutor and multi-launcher behavior
+
+- A single issuer MAY serve many tutors. Each is identified by its `aud` id.
+- A single tutor MAY be onboarded with multiple issuers (multi-launcher tutor). Each issuer gives the tutor its own `iss` URL and (typically) its own `aud` id. From the issuer's perspective this requires no special handling; the tutor's verifier (see `tutor.md` §7) dispatches by `iss`.
+
+---
+
+## 11. Conformance checklist
+
+A launcher + issuer pair conforms to EduSSO v1 if all of the following are true:
+
+- [ ] JWKS endpoint served over HTTPS at a stable URL.
+- [ ] JWKS includes `kty`, `use: sig`, `alg`, `kid` for each key.
+- [ ] Token endpoint requires launcher authentication.
+- [ ] Tokens are signed with RS256 or EdDSA.
+- [ ] Tokens contain `iss`, `aud`, `sub`, `email`, `email_verified`, `iat`, `exp`, `jti`.
+- [ ] `exp - iat` ≤ 300 seconds.
+- [ ] Different mint calls produce different `jti`.
+- [ ] `kid` in the header matches a key currently in the JWKS.
+- [ ] Key rotation can complete without JWKS downtime.
+- [ ] Launcher passes the token via `?edu_session=` in the URL, not via header or message.
+- [ ] Launcher injects `Referrer-Policy: no-referrer` for the tutor origin until the parameter is stripped.
+- [ ] Launcher uses isolated cookie storage per tutor.
+- [ ] Launcher does not cache or reuse tokens.
+
+---
+
+## 12. Versioning
+
+This document specifies v1. Forward-compatible changes (new optional claims, additional algorithms) MAY be released without a new spec version. Breaking changes (removal of required claims, change of signing algorithm requirements) MUST increment the version. Tutors and launchers indicate the version they support out of band; there is no in-protocol version negotiation in v1.
+
+---
+
+# === FILE: specs/edu-sso/conformance.md ===
+
+# EduSSO v1 — Conformance Checklist
+
+Consolidated from `issuer.md` §11 and `tutor.md` §13. Use this as a single page when verifying an implementation.
+
+## Launcher + Issuer
+
+- [ ] JWKS endpoint served over HTTPS at a stable URL.
+- [ ] JWKS includes `kty`, `use: sig`, `alg`, `kid` for each key.
+- [ ] Token endpoint requires launcher authentication.
+- [ ] Tokens signed with RS256 or EdDSA.
+- [ ] Tokens contain `iss`, `aud`, `sub`, `email`, `email_verified`, `iat`, `exp`, `jti`.
+- [ ] `exp - iat` ≤ 300 seconds.
+- [ ] Distinct mint calls produce distinct `jti`.
+- [ ] `kid` in the JWT header matches a key currently in the JWKS.
+- [ ] Key rotation completes without JWKS downtime.
+- [ ] Launcher passes the token via `?edu_session=` in the URL.
+- [ ] Launcher injects `Referrer-Policy: no-referrer` for the tutor origin until the parameter is stripped.
+- [ ] Launcher isolates cookie storage per tutor.
+- [ ] Launcher does not cache or reuse tokens.
+
+## Tutor
+
+- [ ] Verifies JWTs using RS256 or EdDSA via the issuer's JWKS.
+- [ ] Rejects tokens with `alg: none` or symmetric algorithms.
+- [ ] Checks `iss` against configured launcher issuer URLs.
+- [ ] Checks `aud` against the audience id assigned by that launcher.
+- [ ] Checks `exp` and `iat` with at most 5s clock tolerance.
+- [ ] Reads `email` from the verified payload.
+- [ ] Refuses tokens with `email_verified: false`.
+- [ ] Redirects after login to strip `edu_session` from the URL.
+- [ ] Caches JWKS in memory with a documented refresh policy.
+- [ ] Falls through silently on verification error (no error surface to the child).
+- [ ] Does not log the full request URL when `edu_session` is present.
+- [ ] Multi-launcher: dispatches by `iss` to the correct verifier; rejects unknown issuers.
+
+A pair (launcher+issuer, tutor) conforms to EduSSO v1 when every box that applies to its role is checked. There is no automated suite in v1; conformance is by inspection.
+
+---
+
+# === FILE: specs/edu-sso/discovery.md ===
+
+# EduSSO Discovery (optional)
+
+**Status:** v1 draft, optional extension
+**Audience:** tutor implementers who want to be auto-registered by launchers; launcher operators who want to onboard tutors without manual config swaps.
+
+The core protocol (see [`protocol.md`](./protocol.md)) assumes the launcher already knows a tutor's `audience` and the tutor already knows the launcher's `issuer`. That's fine for handcrafted integrations, and it's intentionally what v1 ships. This document describes a small, opt-in discovery manifest a tutor MAY publish so launchers can register it programmatically.
+
+It is **not** OIDC discovery. There is no dynamic client registration, no metadata exchange, no negotiation. The manifest is a static JSON file with three fields.
+
+---
+
+## 1. The manifest
+
+A tutor that supports EduSSO MAY serve a JSON document at:
+
+```
+GET https://<tutor-origin>/.well-known/edu-sso.json
+```
+
+Response:
+
+```json
+{
+  "version": 1,
+  "audience": "tutor.example.com",
+  "issuers": ["https://issuer.launcher-a.com", "https://issuer.launcher-b.com"]
+}
+```
+
+Field semantics:
+
+| Field | Type | Required | Meaning |
+|---|---|---|---|
+| `version` | number | yes | Protocol version. `1` for this document. |
+| `audience` | string | yes | The exact value the tutor expects in the `aud` claim. Usually the tutor's canonical hostname or an opaque id assigned by the operator. |
+| `issuers` | string[] | no | Issuer URLs (`iss` values) the tutor will accept. If absent or empty, the tutor accepts any issuer the launcher has previously been configured with — i.e. "trust the launcher's allow-list." Most tutors should omit this. |
+
+The manifest MUST be served with `Content-Type: application/json` and SHOULD be cacheable (`Cache-Control: public, max-age=3600` is reasonable).
+
+---
+
+## 2. What the launcher does with it
+
+When a launcher operator registers a tutor URL, the launcher SHOULD:
+
+1. Resolve the tutor's origin (scheme + host + port).
+2. `GET <origin>/.well-known/edu-sso.json` with a short timeout (≤5s) and no credentials.
+3. If the response is 200 with valid JSON matching the schema above, mark the tutor as EduSSO-capable and store its `audience`.
+4. If the response is 404, non-JSON, malformed, or the `version` is unknown, mark the tutor as EduSSO-unsupported and continue. **Discovery failure is not an error condition for the launcher** — the tutor simply isn't EduSSO-aware.
+
+The launcher MAY re-run discovery on demand (e.g. an "rediscover" button in admin UI) or on a schedule. It MUST NOT block tutor launches on discovery freshness.
+
+---
+
+## 3. What the tutor implements
+
+Just one static file. No code.
+
+```
+# Next.js: public/.well-known/edu-sso.json
+# Static hosts: drop the file at the appropriate path
+# Express: app.get('/.well-known/edu-sso.json', (_, res) => res.json({ ... }))
+```
+
+The tutor SHOULD keep this file in source control alongside its issuer/audience configuration so the two cannot drift.
+
+---
+
+## 4. What discovery does NOT do
+
+To keep this extension boring:
+
+- It does **not** convey the tutor's redirect URI — there isn't one (see §1 of `protocol.md`).
+- It does **not** publish a JWKS for the tutor — the tutor is the relying party, it does not sign anything.
+- It does **not** declare supported algorithms, scopes, claims, or token transports — those are fixed by v1.
+- It is **not** a registration protocol. The launcher operator still decides whether to trust the tutor; the manifest only makes the audience value self-serve.
+
+If you find yourself wanting to add fields, prefer publishing a separate document at a different `.well-known/` path. Keep this one minimal.
+
+---
+
+## 5. Threat notes
+
+- **Tampering in transit:** the manifest is served over HTTPS; a MITM that can rewrite TLS responses can already do worse. No additional signature is required.
+- **Audience squatting:** a malicious tutor could claim an `audience` already in use by another tutor. Launchers MUST treat the discovered `audience` as a *proposal* — the operator approves the registration. Discovery does not grant trust on its own.
+- **SSRF via the discovery fetch:** launchers SHOULD restrict discovery to public HTTPS origins, refuse private IP ranges, and bound the response size (≤16 KiB is plenty).
+
+---
+
+## 6. Conformance
+
+A tutor's discovery manifest conforms to EduSSO Discovery v1 if:
+
+- [ ] Served at `/.well-known/edu-sso.json` over HTTPS.
+- [ ] `Content-Type: application/json`.
+- [ ] JSON object with `version: 1` and a non-empty string `audience`.
+- [ ] If `issuers` is present, it is an array of HTTPS URL strings.
+- [ ] Response body ≤16 KiB.
+
+A launcher conforms if it treats missing/malformed manifests as "not EduSSO-capable" rather than as errors, and never blocks a tutor launch on discovery.
