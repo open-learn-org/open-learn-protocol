@@ -122,42 +122,45 @@ export async function eduSSO(req, res, next) {
       <p>
         If you use Claude Code, Cursor, Codex, Aider, or similar, paste the prompt below into your agent. It is self-contained and tells the agent exactly what to implement and what to skip. You only need <code>ISSUER</code> and <code>AUDIENCE</code> from your launcher operator.
       </p>
-      <pre><code>Implement EduSSO v1 (relying-party / tutor side) in this codebase.
+      <pre><code>Implement EduSSO v1 (tutor / relying party).
 
-Spec sources — fetch these before writing code:
-- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/protocol.md
+Specs (fetch before coding):
 - https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md
-- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/conformance.md
 - https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/discovery.md
-Reference implementation (Node + jose):
-- https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples/example-tutor
+- https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/conformance.md
+Reference: https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples/example-tutor
 
-Task:
-1. Detect this project's web framework (Next.js, Express, FastAPI, etc.) and identify its entry handler / middleware layer.
-2. Read EDU_SSO_ISSUER and EDU_SSO_AUDIENCE from env. Fail fast if missing.
-3. On every request, if `?edu_session=&lt;jwt&gt;` is present:
-   a. Verify the JWT using the issuer's JWKS at `${EDU_SSO_ISSUER}/.well-known/jwks.json`.
-      - Allow only RS256 and EdDSA. Reject alg=none and HS*.
-      - Check `iss` matches EDU_SSO_ISSUER exactly.
-      - Check `aud` matches EDU_SSO_AUDIENCE.
-      - Enforce `exp` and `iat` with ≤5s clock tolerance.
-      - Require `email_verified === true`.
-   b. On success: upsert the user by email, set the app's own session cookie, then redirect to the same path with `edu_session` removed from the query string.
-   c. On any verification failure: fall through silently to the normal flow (no error to the user, no logging of the raw token).
-4. Cache the JWKS in memory with a 1h TTL (jose `createRemoteJWKSet`, PyJWT `PyJWKClient`, etc.).
-5. Never log the full request URL when `edu_session` is present. Redact the parameter before logging.
-6. Multi-launcher: if more than one (issuer, audience) pair is configured, dispatch by the token's `iss` claim. Reject unknown issuers.
-7. Publish a discovery manifest at `/.well-known/edu-sso.json` returning `{ "version": 1, "audience": "&lt;EDU_SSO_AUDIENCE&gt;" }` with `Content-Type: application/json` so launchers can auto-detect this tutor. Read the audience from env, not a literal, so the manifest can't drift. Optionally include an `entry` field (e.g. `"/auth/edu-sso"`) if you want a dedicated SSO route instead of handling `?edu_session=` at the root — must be same-origin as the manifest.
-8. Run the conformance checklist above. Every box must be checkable.
-9. After deploying, verify with the conformance validator at https://validator.openlearnprotocol.org — paste your tutor URL and confirm all six checks pass. The full-flow check mints a real JWT signed by https://test-issuer.openlearnprotocol.org, so add that issuer to your trust list in staging only.
+Read EDU_SSO_ISSUER and EDU_SSO_AUDIENCE from env (fail fast if missing).
+For multi-launcher, accept EDU_SSO_LAUNCHERS as a JSON array of {issuer, audience}.
 
-Do NOT implement, even if the framework makes them easy:
-- OAuth code exchange, refresh tokens, PKCE, `state`/`nonce`.
+On every request, when ?edu_session=&lt;jwt&gt; is present:
+- Verify via the issuer JWKS at ${ISSUER}/.well-known/jwks.json (jose
+  createRemoteJWKSet / PyJWKClient — they cache for 1h).
+- Allow only RS256 and EdDSA. Reject alg=none and HS*.
+- Check iss matches exactly, aud matches exactly, exp+iat with ≤5s skew,
+  email_verified === true.
+- Multi-launcher: dispatch by the token's iss; drop unknown issuers silently.
+- On success: upsert by email, set your session cookie, 302 to the same
+  path with edu_session stripped.
+- On any failure: drop the token silently and fall through to normal flow.
+  Never log the raw token; redact edu_session from URL logs.
+
+Publish /.well-known/edu-sso.json:
+  { "version": 1, "audience": "&lt;EDU_SSO_AUDIENCE&gt;",
+    "issuers": [...], "entry": "/auth/edu-sso" }  (entry optional, same-origin)
+Read fields from env so the manifest can't drift from your config.
+
+Do NOT implement (even if the framework makes them easy):
+- OAuth code exchange, refresh tokens, PKCE, state/nonce.
 - Scopes, dynamic client registration, federated logout.
-- jti replay tracking (exp + your session cookie are enough).
-- Symmetric JWT verification.
+- jti replay tracking. Symmetric JWT verification.
 
-When you're done, show me: (a) the diff, (b) which conformance items you verified, (c) any items you couldn't verify and why.</code></pre>
+Verify with https://validator.openlearnprotocol.org — six checks, must
+all pass. Add https://test-issuer.openlearnprotocol.org to your trust
+list in staging only (its private key is public).
+
+When done: show the diff, which conformance items you verified, and
+anything you couldn't verify.</code></pre>
       <p>
         Append one of these hints so the agent doesn't guess your stack:
       </p>
