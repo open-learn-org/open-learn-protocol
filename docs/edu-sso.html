@@ -122,7 +122,9 @@ export async function eduSSO(req, res, next) {
       <p>
         If you use Claude Code, Cursor, Codex, Aider, or similar, paste the prompt below into your agent. It is self-contained and tells the agent exactly what to implement and what to skip. You only need <code>ISSUER</code> and <code>AUDIENCE</code> from your launcher operator.
       </p>
-      <pre><code>Implement EduSSO v1 (tutor / relying party).
+      <div class="prompt-wrap">
+        <button type="button" class="copy-btn" data-copy-target="agent-prompt" aria-label="Copy prompt">Copy</button>
+      <pre><code id="agent-prompt">Implement EduSSO v1 (tutor / relying party).
 
 Specs (fetch before coding):
 - https://raw.githubusercontent.com/open-learn-org/open-learn-protocol/main/specs/edu-sso/tutor.md
@@ -161,6 +163,7 @@ list in staging only (its private key is public).
 
 When done: show the diff, which conformance items you verified, and
 anything you couldn't verify.</code></pre>
+      </div>
       <p>
         Append one of these hints so the agent doesn't guess your stack:
       </p>
@@ -208,6 +211,48 @@ anything you couldn't verify.</code></pre>
       </ul>
 
     </main>
+
+    <style>
+      .prompt-wrap { position: relative; }
+      .prompt-wrap .copy-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-family: inherit;
+        background: rgba(255, 255, 255, 0.08);
+        color: inherit;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 6px;
+        cursor: pointer;
+        opacity: 0.85;
+        transition: opacity 0.15s, background 0.15s;
+        z-index: 1;
+      }
+      .prompt-wrap .copy-btn:hover { opacity: 1; background: rgba(255, 255, 255, 0.14); }
+      .prompt-wrap .copy-btn.copied { background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.5); }
+    </style>
+    <script>
+      document.querySelectorAll(".copy-btn[data-copy-target]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const target = document.getElementById(btn.getAttribute("data-copy-target"));
+          if (!target) return;
+          try {
+            await navigator.clipboard.writeText(target.innerText);
+            const original = btn.textContent;
+            btn.textContent = "Copied!";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = original;
+              btn.classList.remove("copied");
+            }, 1500);
+          } catch {
+            btn.textContent = "Press Ctrl+C";
+          }
+        });
+      });
+    </script>
 
     <footer class="site-footer">
       <p>
