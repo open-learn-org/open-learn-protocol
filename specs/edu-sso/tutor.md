@@ -161,6 +161,52 @@ Equivalents in other stacks:
 
 All follow the same shape: load the JWKS once at boot, verify with issuer + audience, read `email`.
 
+### 4.1 Dedicated entry route (optional)
+
+The middleware-at-root pattern above is the simplest implementation, but some tutors prefer to isolate SSO from request middleware — e.g. SSR apps that don't want to inspect every request, or apps where a global middleware adds risk.
+
+You MAY expose a single route — for example `GET /auth/edu-sso` — that runs the same verification logic, and advertise it via the discovery manifest's `entry` field (see [`discovery.md`](./discovery.md) §1):
+
+```json
+{ "version": 1, "audience": "tutor.example.com", "entry": "/auth/edu-sso" }
+```
+
+When the manifest declares `entry`, the launcher targets that path instead of `/`. The handler still MUST:
+
+- Verify the token with the same rules as §3.
+- Set your session cookie on success.
+- Redirect (302) to a clean URL with `edu_session` stripped — typically your home or dashboard, NOT the entry route itself.
+- Silently redirect home (no error) on failure.
+
+The handler SHOULD NOT render HTML on the entry route, so the token never lands in the rendered DOM even on a verification failure.
+
+```ts
+// app/auth/edu-sso/route.ts (Next.js App Router)
+import { NextResponse, type NextRequest } from "next/server";
+import { jwtVerify, createRemoteJWKSet } from "jose";
+
+const ISSUER = "https://issuer.example-launcher.com";
+const AUDIENCE = "tutor.example.com";
+const jwks = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks.json`));
+
+export async function GET(req: NextRequest) {
+  const home = new URL("/", req.nextUrl);
+  const token = req.nextUrl.searchParams.get("edu_session");
+  if (!token) return NextResponse.redirect(home, 302);
+
+  try {
+    const { payload } = await jwtVerify(token, jwks, { issuer: ISSUER, audience: AUDIENCE, clockTolerance: 5 });
+    const res = NextResponse.redirect(new URL("/dashboard", req.nextUrl), 302);
+    res.cookies.set("session", String(payload.email), { httpOnly: true, sameSite: "lax", secure: true, path: "/" });
+    return res;
+  } catch {
+    return NextResponse.redirect(home, 302);
+  }
+}
+```
+
+Both styles are conformant — pick whichever fits your stack.
+
 ---
 
 ## 5. URL hygiene
@@ -169,6 +215,7 @@ The token MUST not survive in places where it can be observed later.
 
 - You MUST redirect to a URL that has the `edu_session` parameter removed.
 - The redirect SHOULD happen *before* you emit any HTML containing references to the child (so the token doesn't end up in a referrer on the first cross-origin asset load).
+- If you use a dedicated entry route (§4.1), the redirect target SHOULD be a different path (your home or dashboard), not the entry route itself.
 - You SHOULD NOT log the full request URL on routes that handle `edu_session`. Strip the parameter from log records or omit those request logs entirely.
 - You SHOULD NOT include the request URL in error reports, analytics, or APM traces while `edu_session` is present.
 
@@ -337,6 +384,7 @@ A tutor conforms to EduSSO v1 if all of the following are true:
 - [ ] Rejects tokens with `alg: none` or symmetric algorithms.
 - [ ] Checks `iss` against configured launcher issuer URLs.
 - [ ] Checks `aud` against the audience id assigned by that launcher.
+- [ ] Accepts `edu_session` at the path declared by its discovery manifest's `entry` (or at `/` if no manifest / no `entry`).
 - [ ] Checks `exp` and `iat` with at most 5s clock tolerance.
 - [ ] Reads `email` from the verified payload.
 - [ ] Refuses tokens with `email_verified: false`.
