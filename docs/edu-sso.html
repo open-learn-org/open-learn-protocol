@@ -62,6 +62,7 @@
 └────┬─────┘     2. edu_session JWT └───────────────┘
      │
      │ 3. GET https://your-app.com/?edu_session=&lt;jwt&gt;
+     │    (or the path your manifest declares via "entry")
      ▼
 ┌────────────┐  4. verify(jwt, JWKS)   ┌──────────────┐
 │ Your app   │ ──────────────────────► │ Public JWKS  │
@@ -146,8 +147,9 @@ Task:
 4. Cache the JWKS in memory with a 1h TTL (jose `createRemoteJWKSet`, PyJWT `PyJWKClient`, etc.).
 5. Never log the full request URL when `edu_session` is present. Redact the parameter before logging.
 6. Multi-launcher: if more than one (issuer, audience) pair is configured, dispatch by the token's `iss` claim. Reject unknown issuers.
-7. Publish a discovery manifest at `/.well-known/edu-sso.json` returning `{ "version": 1, "audience": "&lt;EDU_SSO_AUDIENCE&gt;" }` with `Content-Type: application/json` so launchers can auto-detect this tutor. Read the audience from env, not a literal, so the manifest can't drift.
+7. Publish a discovery manifest at `/.well-known/edu-sso.json` returning `{ "version": 1, "audience": "&lt;EDU_SSO_AUDIENCE&gt;" }` with `Content-Type: application/json` so launchers can auto-detect this tutor. Read the audience from env, not a literal, so the manifest can't drift. Optionally include an `entry` field (e.g. `"/auth/edu-sso"`) if you want a dedicated SSO route instead of handling `?edu_session=` at the root — must be same-origin as the manifest.
 8. Run the conformance checklist above. Every box must be checkable.
+9. After deploying, verify with the conformance validator at https://validator.openlearnprotocol.org — paste your tutor URL and confirm all six checks pass. The full-flow check mints a real JWT signed by https://test-issuer.openlearnprotocol.org, so add that issuer to your trust list in staging only.
 
 Do NOT implement, even if the framework makes them easy:
 - OAuth code exchange, refresh tokens, PKCE, `state`/`nonce`.
@@ -190,11 +192,15 @@ When you're done, show me: (a) the diff, (b) which conformance items you verifie
         </li>
         <li>
           <a href="https://github.com/open-learn-org/open-learn-protocol/blob/main/specs/edu-sso/discovery.md">Discovery manifest (optional)</a>
-          <span class="file">specs/edu-sso/discovery.md</span>
+          <span class="file">specs/edu-sso/discovery.md — includes the <code>entry</code> field for dedicated SSO routes</span>
         </li>
         <li>
           <a href="https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso/examples">Reference implementations</a>
           <span class="file">specs/edu-sso/examples/ — school-issuer, example-tutor, school-host</span>
+        </li>
+        <li>
+          <a href="https://validator.openlearnprotocol.org">Conformance validator</a>
+          <span class="file">validator.openlearnprotocol.org — point it at your tutor and run six end-to-end checks</span>
         </li>
       </ul>
 
