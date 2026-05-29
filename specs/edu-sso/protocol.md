@@ -180,6 +180,9 @@ Two options, both worse than having a backend: a thin serverless verifier (prefe
 **How does the launcher know my audience?**
 Static config by default — the operator types it in. Optionally, you can publish a tiny manifest at `/.well-known/edu-sso.json` so launchers can auto-detect it. See [`discovery.md`](./discovery.md). This is purely opt-in; v1 does not require it.
 
+**Where exactly does the launcher append `edu_session`?**
+By default, the tutor's root (`/`). Tutors that publish a discovery manifest MAY declare an `entry` path — e.g. `/auth/edu-sso` — so the SSO handler lives on a dedicated route instead of being wired into every request. Both styles are conformant; see [`discovery.md`](./discovery.md) §1.
+
 ---
 
 ## What v1 deliberately does *not* include

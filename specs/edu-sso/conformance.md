@@ -24,6 +24,7 @@ Consolidated from `issuer.md` §11 and `tutor.md` §13. Use this as a single pag
 - [ ] Rejects tokens with `alg: none` or symmetric algorithms.
 - [ ] Checks `iss` against configured launcher issuer URLs.
 - [ ] Checks `aud` against the audience id assigned by that launcher.
+- [ ] Accepts `edu_session` at the path declared by its discovery manifest's `entry` (or at `/` if no manifest / no `entry`).
 - [ ] Checks `exp` and `iat` with at most 5s clock tolerance.
 - [ ] Reads `email` from the verified payload.
 - [ ] Refuses tokens with `email_verified: false`.

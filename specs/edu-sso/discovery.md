@@ -5,7 +5,7 @@
 
 The core protocol (see [`protocol.md`](./protocol.md)) assumes the launcher already knows a tutor's `audience` and the tutor already knows the launcher's `issuer`. That's fine for handcrafted integrations, and it's intentionally what v1 ships. This document describes a small, opt-in discovery manifest a tutor MAY publish so launchers can register it programmatically.
 
-It is **not** OIDC discovery. There is no dynamic client registration, no metadata exchange, no negotiation. The manifest is a static JSON file with three fields.
+It is **not** OIDC discovery. There is no dynamic client registration, no metadata exchange, no negotiation. The manifest is a static JSON file with a handful of fields.
 
 ---
 
@@ -23,6 +23,7 @@ Response:
 {
   "version": 1,
   "audience": "tutor.example.com",
+  "entry": "/auth/edu-sso",
   "issuers": ["https://issuer.launcher-a.com", "https://issuer.launcher-b.com"]
 }
 ```
@@ -33,7 +34,10 @@ Field semantics:
 |---|---|---|---|
 | `version` | number | yes | Protocol version. `1` for this document. |
 | `audience` | string | yes | The exact value the tutor expects in the `aud` claim. Usually the tutor's canonical hostname or an opaque id assigned by the operator. |
+| `entry` | string | no | Path (or absolute URL on the same origin as the manifest) where the launcher MUST append `?edu_session=<JWT>`. Defaults to `/` if absent. Lets a tutor expose a dedicated SSO route instead of handling the parameter on every request. |
 | `issuers` | string[] | no | Issuer URLs (`iss` values) the tutor will accept. If absent or empty, the tutor accepts any issuer the launcher has previously been configured with — i.e. "trust the launcher's allow-list." Most tutors should omit this. |
+
+**`entry` semantics.** The launcher resolves `entry` against the tutor origin (or uses it as-is if absolute), then appends `?edu_session=<JWT>` to its query string. If `entry` is an absolute URL it MUST be same-origin as the manifest — launchers MUST reject manifests whose `entry` points to a different origin. If absent, the launcher uses the tutor's root (`/`), preserving v1 behavior.
 
 The manifest MUST be served with `Content-Type: application/json` and SHOULD be cacheable (`Cache-Control: public, max-age=3600` is reasonable).
 
@@ -94,6 +98,7 @@ A tutor's discovery manifest conforms to EduSSO Discovery v1 if:
 - [ ] Served at `/.well-known/edu-sso.json` over HTTPS.
 - [ ] `Content-Type: application/json`.
 - [ ] JSON object with `version: 1` and a non-empty string `audience`.
+- [ ] If `entry` is present, it is a string that resolves to a same-origin URL.
 - [ ] If `issuers` is present, it is an array of HTTPS URL strings.
 - [ ] Response body ≤16 KiB.
 

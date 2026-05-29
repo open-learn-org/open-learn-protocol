@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { CheckResult, ValidationReport } from "../lib/checks";
 
-const DEFAULT_ISSUER = "https://issuer.portalbosque.org";
+const DEFAULT_ISSUER = "https://test-issuer.openlearnprotocol.org";
 
 const LEVEL_COLOR: Record<CheckResult["level"], string> = {
   pass: "#22c55e",
@@ -20,7 +20,7 @@ const LEVEL_LABEL: Record<CheckResult["level"], string> = {
 
 export default function Home() {
   const [tutorUrl, setTutorUrl] = useState("https://example-tutor.vercel.app");
-  const [issuerUrl, setIssuerUrl] = useState(DEFAULT_ISSUER);
+  const issuerUrl = DEFAULT_ISSUER;
   const [running, setRunning] = useState(false);
   const [report, setReport] = useState<ValidationReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +61,26 @@ export default function Home() {
         Black-box conformance checks for a tutor / relying party.
         See <a style={{ color: "#60a5fa" }} href="https://github.com/open-learn-org/open-learn-protocol/tree/main/specs/edu-sso">edu-sso specs</a>.
       </p>
+      <div
+        style={{
+          marginTop: 12,
+          padding: 12,
+          border: "1px solid #1e3a5f",
+          borderRadius: 8,
+          background: "#0c1a2e",
+          fontSize: 13,
+          color: "#cbd5e1",
+        }}
+      >
+        The full SSO flow check mints a real JWT signed by{" "}
+        <code style={{ color: "#60a5fa" }}>{DEFAULT_ISSUER}</code> and sends it to your tutor.
+        For this to pass, configure your tutor to trust this issuer in staging — e.g.
+        <pre style={{ margin: "8px 0 0", padding: 8, background: "#020617", borderRadius: 4, overflow: "auto" }}>
+{`EDU_SSO_ISSUER=${DEFAULT_ISSUER}
+EDU_SSO_AUDIENCE=<your tutor host>`}
+        </pre>
+        JWKS lives at <code style={{ color: "#60a5fa" }}>{DEFAULT_ISSUER}/.well-known/jwks.json</code>.
+      </div>
 
       <section
         style={{
@@ -83,15 +103,12 @@ export default function Home() {
           />
         </label>
         <label style={{ display: "grid", gap: 4 }}>
-          <span style={{ fontSize: 13, color: "#94a3b8" }}>Issuer URL</span>
-          <input
-            value={issuerUrl}
-            onChange={(e) => setIssuerUrl(e.target.value)}
-            placeholder={DEFAULT_ISSUER}
-            style={inputStyle}
-          />
+          <span style={{ fontSize: 13, color: "#94a3b8" }}>
+            Issuer URL <span style={{ color: "#64748b" }}>(fixed — the validator only mints tokens from its own test issuer)</span>
+          </span>
+          <input value={issuerUrl} readOnly disabled style={{ ...inputStyle, opacity: 0.7, cursor: "not-allowed" }} />
         </label>
-        <button onClick={run} disabled={running || !tutorUrl || !issuerUrl} style={buttonStyle}>
+        <button onClick={run} disabled={running || !tutorUrl} style={buttonStyle}>
           {running ? "Running checks…" : "Run validation"}
         </button>
       </section>
